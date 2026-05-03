@@ -48,6 +48,13 @@ export const useAuthStore = create<AuthState>()(
           tempToken: null,
           requiresSchoolSelection: false,
         });
+        // Set a client-readable cookie on this domain so the middleware can
+        // see auth state. The real JWT lives in the httpOnly cookie on the API
+        // domain — this cookie only carries role + expiry for routing decisions.
+        if (typeof document !== 'undefined') {
+          const maxAge = 15 * 60; // 15 minutes — matches ACCESS_TOKEN_EXPIRE_MINUTES
+          document.cookie = `_auth_role=${tokenResponse.user.role}; path=/; max-age=${maxAge}; SameSite=Lax`;
+        }
       },
 
       logout() {
@@ -62,6 +69,7 @@ export const useAuthStore = create<AuthState>()(
         });
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem('edumag-auth');
+          document.cookie = '_auth_role=; path=/; max-age=0';
         }
       },
 
@@ -100,6 +108,10 @@ export const useAuthStore = create<AuthState>()(
           accessToken,
           isAuthenticated: true,
         });
+        if (typeof document !== 'undefined') {
+          const maxAge = 15 * 60;
+          document.cookie = `_auth_role=${user.role}; path=/; max-age=${maxAge}; SameSite=Lax`;
+        }
       },
     }),
     {
