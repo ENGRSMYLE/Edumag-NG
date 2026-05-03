@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -14,6 +14,7 @@ import {
   Loader2,
   Eye,
   EyeOff,
+  Mail,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
@@ -85,6 +86,11 @@ export function SignupForm() {
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
+  const [verificationToken, setVerificationToken] = useState('');
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const {
     register,
@@ -92,7 +98,8 @@ export function SignupForm() {
     watch,
     trigger,
     setValue,
-    formState: { errors, isSubmitting },
+    getValues,
+    formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { school_type: undefined },
@@ -101,23 +108,103 @@ export function SignupForm() {
 
   const schoolType = watch('school_type');
 
+  // ── Step 1 → Step 2 ────────────────────────────────────────────────────────
   const goToStep2 = async () => {
     const valid = await trigger([
-      'school_name',
-      'school_type',
-      'state',
-      'lga',
-      'address',
-      'phone',
+      'school_name', 'school_type', 'state', 'lga', 'address', 'phone',
     ]);
     if (valid) setStep(2);
   };
 
-  const onSubmit = async (data: FormData) => {
-    // Prepend +234 and strip spaces/dashes entered by user
-    const phone = '+234' + data.phone.replace(/\D/g, '').replace(/^0/, '');
+  // ── Step 2 → Step 3: validate account fields then send OTP ─────────────────
+  const goToStep3 = async () => {
+    const valid = await trigger(['admin_name', 'email', 'password', 'confirm_password', 'terms']);
+    if (!valid) return;
 
+    setIsSendingOtp(true);
     try {
+      await authApi.sendOTP({
+        email: getValues('email'),
+        school_name: getValues('school_name'),
+      });
+      toast.success('Verification code sent to your email');
+      setOtpDigits(['', '', '', '', '', '']);
+      setStep(3);
+      setTimeout(() => otpRefs.current[0]?.focus(), 100);
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })
+        ?.response?.data?.detail;
+      toast.error(typeof detail === 'string' ? detail : 'Failed to send verification code.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // ── OTP digit input handler ─────────────────────────────────────────────────
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    const next = [...otpDigits];
+    next[index] = value.slice(-1);
+    setOtpDigits(next);
+    if (value && index < 5) otpRefs.current[index + 1]?.focus();
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (text.length === 6) {
+      setOtpDigits(text.split(''));
+      otpRefs.current[5]?.focus();
+    }
+  };
+
+  // ── Resend OTP ──────────────────────────────────────────────────────────────
+  const resendOtp = async () => {
+    setIsSendingOtp(true);
+    try {
+      await authApi.sendOTP({
+        email: getValues('email'),
+        school_name: getValues('school_name'),
+      });
+      toast.success('New code sent');
+      setOtpDigits(['', '', '', '', '', '']);
+      otpRefs.current[0]?.focus();
+    } catch {
+      toast.error('Failed to resend code');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // ── Step 3: verify OTP then register ───────────────────────────────────────
+  const onVerifyAndRegister = async () => {
+    const otp = otpDigits.join('');
+    if (otp.length !== 6) {
+      toast.error('Enter the 6-digit code');
+      return;
+    }
+
+    setIsVerifying(true);
+    try {
+      // 1. Verify OTP → get verification_token
+      let token = verificationToken;
+      if (!token) {
+        const verifyRes = await authApi.verifyOTP({
+          email: getValues('email'),
+          otp,
+        });
+        token = verifyRes.data.verification_token;
+        setVerificationToken(token);
+      }
+
+      // 2. Register school
+      const data = getValues();
+      const phone = '+234' + data.phone.replace(/\D/g, '').replace(/^0/, '');
       const res = await authApi.registerSchool({
         school_name: data.school_name,
         school_type: data.school_type,
@@ -128,6 +215,7 @@ export function SignupForm() {
         admin_name: data.admin_name,
         email: data.email,
         password: data.password,
+        verification_token: token,
       });
 
       loginStore(res.data);
@@ -136,41 +224,41 @@ export function SignupForm() {
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: unknown } } })
         ?.response?.data?.detail;
-      let message = 'Registration failed. Please try again.';
+      let message = 'Verification failed. Please try again.';
       if (typeof detail === 'string') {
         message = detail;
-      } else if (Array.isArray(detail) && detail.length > 0) {
-        const first = detail[0] as { msg?: string };
-        if (typeof first?.msg === 'string') {
-          // Strip "Value error, " prefix Pydantic adds
-          message = first.msg.replace(/^Value error,\s*/i, '');
-        }
+      } else if (detail && typeof detail === 'object' && 'detail' in detail) {
+        message = (detail as { detail: string }).detail;
       }
       toast.error(message);
+      // Reset token so next attempt re-verifies OTP
+      setVerificationToken('');
+    } finally {
+      setIsVerifying(false);
     }
   };
 
+  const stepLabel = step === 1 ? 'School Information' : step === 2 ? 'Your Account' : 'Verify Email';
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-0">
+    <div className="flex flex-col gap-0">
       {/* Progress bar */}
       <div className="flex flex-col gap-2 mb-7">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-[var(--color-text-muted)]">
-            Step {step} of 2
+            Step {step} of 3
           </span>
-          <span className="text-xs text-[var(--color-text-muted)]">
-            {step === 1 ? 'School Information' : 'Your Account'}
-          </span>
+          <span className="text-xs text-[var(--color-text-muted)]">{stepLabel}</span>
         </div>
         <div className="h-1.5 bg-[var(--color-surface)] rounded-full overflow-hidden">
           <div
             className="h-full bg-[var(--color-gold)] rounded-full transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
-            style={{ width: step === 1 ? '50%' : '100%' }}
+            style={{ width: step === 1 ? '33%' : step === 2 ? '66%' : '100%' }}
           />
         </div>
       </div>
 
-      {/* ── STEP 1 ── */}
+      {/* ── STEP 1: School Info ── */}
       {step === 1 && (
         <div className="flex flex-col gap-5">
           {/* School Name */}
@@ -200,11 +288,7 @@ export function SignupForm() {
                   <button
                     key={value}
                     type="button"
-                    onClick={() =>
-                      setValue('school_type', value, {
-                        shouldValidate: true,
-                      })
-                    }
+                    onClick={() => setValue('school_type', value, { shouldValidate: true })}
                     className={clsx(
                       'flex flex-col items-center gap-2 py-3 px-2 rounded-xl border text-center',
                       'transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
@@ -253,9 +337,7 @@ export function SignupForm() {
             >
               <option value="">Select a state</option>
               {NIGERIAN_STATES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
             {errors.state && (
@@ -307,10 +389,7 @@ export function SignupForm() {
                 {...register('phone')}
                 type="tel"
                 placeholder="801 234 5678"
-                className={clsx(
-                  inputCx(!!errors.phone),
-                  'rounded-l-none border-l-0',
-                )}
+                className={clsx(inputCx(!!errors.phone), 'rounded-l-none border-l-0')}
               />
             </div>
             {errors.phone && (
@@ -318,7 +397,6 @@ export function SignupForm() {
             )}
           </div>
 
-          {/* Next */}
           <button
             type="button"
             onClick={goToStep2}
@@ -336,7 +414,7 @@ export function SignupForm() {
         </div>
       )}
 
-      {/* ── STEP 2 ── */}
+      {/* ── STEP 2: Admin Account ── */}
       {step === 2 && (
         <div className="flex flex-col gap-5">
           {/* Admin Name */}
@@ -390,11 +468,7 @@ export function SignupForm() {
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors p-0.5"
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
-                {showPassword ? (
-                  <EyeOff className="w-4 h-4" strokeWidth={1.5} />
-                ) : (
-                  <Eye className="w-4 h-4" strokeWidth={1.5} />
-                )}
+                {showPassword ? <EyeOff className="w-4 h-4" strokeWidth={1.5} /> : <Eye className="w-4 h-4" strokeWidth={1.5} />}
               </button>
             </div>
             {errors.password && (
@@ -402,7 +476,7 @@ export function SignupForm() {
             )}
           </div>
 
-          {/* Confirm password */}
+          {/* Confirm Password */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-[var(--color-text-primary)]">
               Confirm Password
@@ -421,34 +495,23 @@ export function SignupForm() {
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors p-0.5"
                 aria-label={showConfirm ? 'Hide password' : 'Show password'}
               >
-                {showConfirm ? (
-                  <EyeOff className="w-4 h-4" strokeWidth={1.5} />
-                ) : (
-                  <Eye className="w-4 h-4" strokeWidth={1.5} />
-                )}
+                {showConfirm ? <EyeOff className="w-4 h-4" strokeWidth={1.5} /> : <Eye className="w-4 h-4" strokeWidth={1.5} />}
               </button>
             </div>
             {errors.confirm_password && (
-              <p className="text-xs text-red-500">
-                {errors.confirm_password.message}
-              </p>
+              <p className="text-xs text-red-500">{errors.confirm_password.message}</p>
             )}
           </div>
 
           {/* Terms */}
           <label className="flex items-start gap-3 cursor-pointer group">
             <div className="relative mt-0.5 flex-shrink-0">
-              <input
-                {...register('terms')}
-                type="checkbox"
-                className="sr-only peer"
-              />
+              <input {...register('terms')} type="checkbox" className="sr-only peer" />
               <div
                 className={clsx(
                   'w-4 h-4 rounded border',
                   'peer-checked:bg-[var(--color-navy)] peer-checked:border-[var(--color-navy)]',
-                  'border-[var(--color-border)] bg-white',
-                  'transition-all duration-150',
+                  'border-[var(--color-border)] bg-white transition-all duration-150',
                   errors.terms ? 'border-red-300' : '',
                 )}
               />
@@ -458,24 +521,14 @@ export function SignupForm() {
                 fill="none"
                 aria-hidden="true"
               >
-                <path
-                  d="M1 4l2.5 2.5L9 1"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                <path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <span className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
               I agree to the{' '}
-              <a href="#" className="underline underline-offset-2 hover:text-[var(--color-navy)]">
-                Terms of Service
-              </a>{' '}
-              and{' '}
-              <a href="#" className="underline underline-offset-2 hover:text-[var(--color-navy)]">
-                Privacy Policy
-              </a>
+              <a href="#" className="underline underline-offset-2 hover:text-[var(--color-navy)]">Terms of Service</a>
+              {' '}and{' '}
+              <a href="#" className="underline underline-offset-2 hover:text-[var(--color-navy)]">Privacy Policy</a>
             </span>
           </label>
           {errors.terms && (
@@ -497,10 +550,10 @@ export function SignupForm() {
               <ChevronLeft className="w-4 h-4" strokeWidth={2} />
               Back
             </button>
-
             <button
-              type="submit"
-              disabled={isSubmitting}
+              type="button"
+              onClick={goToStep3}
+              disabled={isSendingOtp}
               className={clsx(
                 'flex-1 py-3 rounded-xl text-sm font-semibold',
                 'bg-[var(--color-gold)] text-[var(--color-navy)]',
@@ -510,12 +563,88 @@ export function SignupForm() {
                 'disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100',
               )}
             >
-              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              Create School Account
+              {isSendingOtp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              {isSendingOtp ? 'Sending Code...' : 'Verify Email'}
             </button>
           </div>
         </div>
       )}
-    </form>
+
+      {/* ── STEP 3: OTP Verification ── */}
+      {step === 3 && (
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-1 text-center">
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              We sent a 6-digit code to
+            </p>
+            <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+              {getValues('email')}
+            </p>
+          </div>
+
+          {/* OTP Boxes */}
+          <div className="flex gap-2 justify-center" onPaste={handleOtpPaste}>
+            {otpDigits.map((digit, i) => (
+              <input
+                key={i}
+                ref={(el) => { otpRefs.current[i] = el; }}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={digit}
+                onChange={(e) => handleOtpChange(i, e.target.value)}
+                onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                className={clsx(
+                  'w-11 h-12 text-center text-lg font-bold rounded-xl border',
+                  'bg-white text-[var(--color-text-primary)]',
+                  'focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)]/25 focus:border-[var(--color-gold)]',
+                  'transition-all duration-200',
+                  digit ? 'border-[var(--color-navy)]' : 'border-[var(--color-border)]',
+                )}
+              />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={onVerifyAndRegister}
+            disabled={isVerifying || otpDigits.join('').length !== 6}
+            className={clsx(
+              'w-full py-3 rounded-xl text-sm font-semibold',
+              'bg-[var(--color-gold)] text-[var(--color-navy)]',
+              'hover:bg-[var(--color-gold-light)] active:scale-[0.98]',
+              'flex items-center justify-center gap-2',
+              'transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
+              'disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100',
+            )}
+          >
+            {isVerifying && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isVerifying ? 'Creating Account...' : 'Create School Account'}
+          </button>
+
+          <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)]">
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              className="flex items-center gap-1 hover:text-[var(--color-text-primary)] transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2} />
+              Change email
+            </button>
+            <button
+              type="button"
+              onClick={resendOtp}
+              disabled={isSendingOtp}
+              className="hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-50"
+            >
+              {isSendingOtp ? 'Sending...' : 'Resend code'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden form fields needed for handleSubmit — not used directly */}
+      <form onSubmit={handleSubmit(() => {})} className="hidden" aria-hidden="true" />
+    </div>
   );
 }

@@ -65,14 +65,15 @@ export function LoginForm() {
       }
 
       // Single school: log in directly
-      login(response as TokenResponse);
+      const tokenResponse = response as TokenResponse;
+      login(tokenResponse);
 
-      if (response.user.is_first_login) {
+      if (tokenResponse.user.is_first_login) {
         router.push('/set-password');
         return;
       }
 
-      const dest = ROLE_HOME[response.user.role] ?? '/login';
+      const dest = ROLE_HOME[tokenResponse.user.role] ?? '/login';
       router.push(dest);
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: unknown } } })
