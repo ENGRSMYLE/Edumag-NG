@@ -134,7 +134,7 @@ export default function StaffDashboardPage() {
   // Mock data — replace with real API once backend is ready
   const attendanceTaken = false;
   const pendingScores: number = 3;
-  const pendingGrading = 2;
+  const pendingGrading: number = 2;
 
   return (
     <div className="flex flex-col gap-6">
