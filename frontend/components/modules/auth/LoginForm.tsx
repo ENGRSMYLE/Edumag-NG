@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
-import type { UserRole } from '@/types/auth';
+import type { UserRole, TokenResponse } from '@/types/auth';
 
 const ROLE_HOME: Record<UserRole, string> = {
   super_admin: '/dashboard/super-admin',
@@ -65,7 +65,7 @@ export function LoginForm() {
       }
 
       // Single school: log in directly
-      login(response);
+      login(response as TokenResponse);
 
       if (response.user.is_first_login) {
         router.push('/set-password');
