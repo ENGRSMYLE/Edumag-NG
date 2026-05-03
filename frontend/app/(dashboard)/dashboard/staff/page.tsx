@@ -133,7 +133,7 @@ export default function StaffDashboardPage() {
 
   // Mock data — replace with real API once backend is ready
   const attendanceTaken = false;
-  const pendingScores = 3;
+  const pendingScores: number = 3;
   const pendingGrading = 2;
 
   return (
