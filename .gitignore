@@ -1,0 +1,66 @@
+# Claude
+.claude/
+frontend/.claude/
+backend/.claude/
+
+# Environment files — never commit secrets
+.env
+.env.local
+.env.production
+.env.staging
+**/.env
+**/.env.local
+**/.env.production
+**/.env.staging
+# Allow example files
+!**/.env.example
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+backend/venv/
+backend/.venv/
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+**/.pytest_cache/
+.coverage
+**/.coverage
+htmlcov/
+*.sqlite3
+*.db
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/.pnpm-store/
+frontend/out/
+frontend/.turbo/
+
+# Docker — dev compose is safe, but ignore any prod overrides with real passwords
+docker-compose.prod.yml
+docker-compose.production.yml
+docker-compose.override.yml
+
+# Uploads / media
+backend/uploads/
+backend/media/
+
+# Logs
+*.log
+**/*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
