@@ -60,7 +60,7 @@ const schema = z
     phone: z
       .string()
       .min(1, 'Phone number is required')
-      .regex(/^[0-9]{7,11}$/, 'Enter a valid Nigerian phone number (7–11 digits)'),
+      .regex(/^0?[789][01]\d{8}$/, 'Enter a valid Nigerian number e.g. 08012345678'),
     // Step 2
     admin_name: z.string().min(2, 'Your full name is required'),
     email: z.string().email('Enter a valid email address'),
@@ -408,12 +408,12 @@ export function SignupForm() {
             </label>
             <div className="flex items-stretch gap-0">
               <span className="flex items-center px-3.5 text-xs font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)] border border-[var(--color-border)] border-r-0 rounded-l-xl">
-                +234
+                🇳🇬
               </span>
               <input
                 {...register('phone')}
                 type="tel"
-                placeholder="801 234 5678"
+                placeholder="08012345678"
                 className={clsx(inputCx(!!errors.phone), 'rounded-l-none border-l-0')}
               />
             </div>
