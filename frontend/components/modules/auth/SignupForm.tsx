@@ -31,6 +31,21 @@ const NIGERIAN_STATES = [
   'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara',
 ];
 
+// ─── Password strength helper ─────────────────────────────────────────────────
+const passwordRules = [
+  { label: 'At least 8 characters', test: (p: string) => p.length >= 8 },
+  { label: 'Uppercase letter (A–Z)', test: (p: string) => /[A-Z]/.test(p) },
+  { label: 'Lowercase letter (a–z)', test: (p: string) => /[a-z]/.test(p) },
+  { label: 'Number (0–9)', test: (p: string) => /[0-9]/.test(p) },
+  { label: 'Special character (!@#$…)', test: (p: string) => /[^A-Za-z0-9]/.test(p) },
+];
+
+const getPasswordStrength = (password: string) =>
+  passwordRules.filter((r) => r.test(password)).length;
+
+const STRENGTH_LABEL = ['', 'Very Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'];
+const STRENGTH_COLOR = ['', 'bg-red-500', 'bg-orange-400', 'bg-yellow-400', 'bg-green-400', 'bg-green-600'];
+
 // ─── Zod Schema ───────────────────────────────────────────────────────────────
 const schema = z
   .object({
@@ -42,12 +57,21 @@ const schema = z
     state: z.string().min(1, 'Select a state'),
     lga: z.string().min(2, 'LGA is required'),
     address: z.string().min(5, 'Enter a valid address'),
-    phone: z.string().min(8, 'Enter a valid phone number'),
+    phone: z
+      .string()
+      .min(1, 'Phone number is required')
+      .regex(/^[0-9]{7,11}$/, 'Enter a valid Nigerian phone number (7–11 digits)'),
     // Step 2
-    admin_name: z.string().min(2, 'Your name is required'),
+    admin_name: z.string().min(2, 'Your full name is required'),
     email: z.string().email('Enter a valid email address'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
-    confirm_password: z.string(),
+    password: z
+      .string()
+      .min(8, 'Password must be at least 8 characters')
+      .regex(/[A-Z]/, 'Must contain at least one uppercase letter')
+      .regex(/[a-z]/, 'Must contain at least one lowercase letter')
+      .regex(/[0-9]/, 'Must contain at least one number')
+      .regex(/[^A-Za-z0-9]/, 'Must contain at least one special character'),
+    confirm_password: z.string().min(1, 'Please confirm your password'),
     terms: z.literal(true, {
       errorMap: () => ({ message: 'You must accept the terms to continue' }),
     }),
@@ -107,6 +131,7 @@ export function SignupForm() {
   });
 
   const schoolType = watch('school_type');
+  const passwordValue = watch('password') ?? '';
 
   // ── Step 1 → Step 2 ────────────────────────────────────────────────────────
   const goToStep2 = async () => {
@@ -471,7 +496,45 @@ export function SignupForm() {
                 {showPassword ? <EyeOff className="w-4 h-4" strokeWidth={1.5} /> : <Eye className="w-4 h-4" strokeWidth={1.5} />}
               </button>
             </div>
-            {errors.password && (
+            {/* Strength meter */}
+            {passwordValue.length > 0 && (() => {
+              const strength = getPasswordStrength(passwordValue);
+              return (
+                <div className="flex flex-col gap-1.5 mt-0.5">
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div
+                        key={i}
+                        className={clsx(
+                          'h-1 flex-1 rounded-full transition-all duration-300',
+                          i <= strength ? STRENGTH_COLOR[strength] : 'bg-[var(--color-border)]',
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <p className={clsx(
+                    'text-xs font-medium',
+                    strength <= 2 ? 'text-red-500' : strength === 3 ? 'text-yellow-600' : 'text-green-600',
+                  )}>
+                    {STRENGTH_LABEL[strength]}
+                  </p>
+                  <ul className="flex flex-col gap-0.5">
+                    {passwordRules.map((rule) => {
+                      const passed = rule.test(passwordValue);
+                      return (
+                        <li key={rule.label} className={clsx('text-[11px] flex items-center gap-1.5', passed ? 'text-green-600' : 'text-[var(--color-text-muted)]')}>
+                          <span className={clsx('inline-block w-3.5 h-3.5 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold', passed ? 'bg-green-100 text-green-600' : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]')}>
+                            {passed ? '✓' : '·'}
+                          </span>
+                          {rule.label}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })()}
+            {errors.password && !passwordValue && (
               <p className="text-xs text-red-500">{errors.password.message}</p>
             )}
           </div>
@@ -553,7 +616,8 @@ export function SignupForm() {
             <button
               type="button"
               onClick={goToStep3}
-              disabled={isSendingOtp}
+              disabled={isSendingOtp || getPasswordStrength(passwordValue) < 5}
+              title={getPasswordStrength(passwordValue) < 5 ? 'Password does not meet all requirements' : undefined}
               className={clsx(
                 'flex-1 py-3 rounded-xl text-sm font-semibold',
                 'bg-[var(--color-gold)] text-[var(--color-navy)]',
