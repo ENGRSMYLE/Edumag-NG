@@ -48,6 +48,7 @@ def _user_response(user: User, membership: SchoolMembership) -> UserResponse:
         "class_id": membership.class_id,
         "created_at": membership.created_at,
         "last_login_at": user.last_login_at,
+        "invite_token": membership.invite_token,
     })
 
 

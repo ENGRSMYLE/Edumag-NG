@@ -10,6 +10,7 @@ import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
 
 import { useAuth } from '@/hooks/useAuth';
+import { useUnreadCount } from '@/hooks/useCommunication';
 import { getInitials } from '@/lib/formatters';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
@@ -80,6 +81,19 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const avatarRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const pageName = getPageLabel(pathname);
+
+  const setUser = useAuthStore((s) => s.setUser);
+
+  // Refresh user from DB on every dashboard load so class assignments reflect immediately
+  useQuery({
+    queryKey: ['me'],
+    queryFn: () => authApi.me().then((r) => { setUser(r.data); return r.data; }),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const { data: unreadData } = useUnreadCount();
+  const unreadCount = unreadData?.count ?? 0;
 
   const { data: schools = [], isLoading: schoolsLoading } = useQuery<SchoolOption[]>({
     queryKey: ['my-schools'],
@@ -181,10 +195,16 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
           aria-label="Notifications"
         >
           <Bell className="w-[18px] h-[18px]" strokeWidth={1.5} />
-          <span
-            className="absolute top-[7px] right-[7px] w-[7px] h-[7px] rounded-full bg-[var(--color-gold)] border-2 border-white"
-            aria-hidden="true"
-          />
+          {unreadCount > 0 && (
+            <span
+              className="absolute top-[5px] right-[5px] min-w-[16px] h-4 px-1 rounded-full bg-red-500 border-2 border-white flex items-center justify-center"
+              aria-hidden="true"
+            >
+              <span className="text-[9px] font-bold text-white leading-none">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            </span>
+          )}
         </button>
 
         <div className="hidden md:block w-px h-5 bg-[var(--color-border)] mx-1" />
@@ -247,15 +267,17 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
                     <ArrowLeftRight className="w-4 h-4 text-[var(--color-text-muted)]" strokeWidth={1.5} />
                     Switch School
                   </button>
-                  <Link
-                    href="/dashboard/super-admin/settings"
-                    onClick={() => setDropdownOpen(false)}
-                    role="menuitem"
-                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] transition-colors duration-150 cursor-pointer"
-                  >
-                    <Settings className="w-4 h-4 text-[var(--color-text-muted)]" strokeWidth={1.5} />
-                    Settings
-                  </Link>
+                  {user?.role === 'super_admin' && (
+                    <Link
+                      href="/dashboard/super-admin/settings"
+                      onClick={() => setDropdownOpen(false)}
+                      role="menuitem"
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] transition-colors duration-150 cursor-pointer"
+                    >
+                      <Settings className="w-4 h-4 text-[var(--color-text-muted)]" strokeWidth={1.5} />
+                      Settings
+                    </Link>
+                  )}
                   <button
                     onClick={handleLogout}
                     role="menuitem"

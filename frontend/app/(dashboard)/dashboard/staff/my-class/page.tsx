@@ -9,17 +9,13 @@ import { clsx } from 'clsx';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { DataTable, type Column } from '@/components/shared/DataTable';
 import { Badge } from '@/components/shared/Badge';
-import { studentsApi } from '@/lib/api';
+import { studentsApi, classesApi } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import { getInitials } from '@/lib/formatters';
 import type { StudentListItem } from '@/types/student';
 
-// Mock: a teacher with no class assigned would have class_id = null from useAuth.
-// For now we simulate having a class assigned.
-const TEACHER_CLASS_ASSIGNED = true;
-const CLASS_NAME = 'JSS 3A';
-
 function StudentNameCell({ row }: { row: StudentListItem }) {
-  const fullName = `${row.first_name} ${row.last_name}`;
+  const fullName = row.full_name || `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim() || 'Unknown';
   return (
     <div className="flex items-center gap-2.5">
       <div className="w-8 h-8 rounded-full bg-[var(--color-gold)]/15 flex items-center justify-center flex-shrink-0">
@@ -59,19 +55,27 @@ function NoClassAssignedState() {
 }
 
 export default function MyClassPage() {
+  const { classId } = useAuth();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+
+  const { data: classData } = useQuery({
+    queryKey: ['classes', classId],
+    queryFn: () => classesApi.list().then((r) => r.data.items.find((c) => c.id === classId)),
+    staleTime: 120_000,
+    enabled: !!classId,
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-class-students', { page, search, per_page: 25 }],
     queryFn: () =>
-      studentsApi.list({ page, per_page: 25, search: search || undefined, is_active: true }).then((r) => r.data),
+      studentsApi.myClass({ page, per_page: 25, search: search || undefined, is_active: true }).then((r) => r.data),
     staleTime: 60_000,
     retry: 1,
-    enabled: TEACHER_CLASS_ASSIGNED,
+    enabled: !!classId,
   });
 
-  if (!TEACHER_CLASS_ASSIGNED) {
+  if (!classId) {
     return (
       <div className="flex flex-col gap-5">
         <PageHeader
@@ -93,6 +97,7 @@ export default function MyClassPage() {
     {
       key: 'gender',
       header: 'Gender',
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-secondary)] capitalize">{String(v)}</span>
       ),
@@ -135,10 +140,12 @@ export default function MyClassPage() {
     },
   ];
 
+  const className = classData?.name ?? 'My Class';
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title={CLASS_NAME}
+        title={className}
         description="Students enrolled in your class"
       />
 

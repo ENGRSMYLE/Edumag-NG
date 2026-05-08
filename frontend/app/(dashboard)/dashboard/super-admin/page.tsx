@@ -72,7 +72,7 @@ function ActivityRow({ item }: { item: RecentActivity }) {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SuperAdminOverviewPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['dashboard', 'overview'],
     queryFn: () => dashboardApi.overview().then((r) => r.data),
     staleTime: 30_000,
@@ -86,6 +86,13 @@ export default function SuperAdminOverviewPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      {isError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 font-mono">
+          Dashboard error: {(error as any)?.response?.status ?? 'network'} —{' '}
+          {JSON.stringify((error as any)?.response?.data ?? (error as any)?.message ?? String(error))}
+        </div>
+      )}
+
       {/* ── Stat cards ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {isLoading ? (

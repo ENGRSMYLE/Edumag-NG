@@ -25,8 +25,9 @@ export interface Student {
 export interface StudentListItem {
   id: string;
   admission_number: string;
-  first_name: string;
-  last_name: string;
+  first_name?: string;
+  last_name?: string;
+  full_name: string;
   middle_name?: string;
   gender: Gender;
   photo_url?: string;
@@ -49,6 +50,7 @@ export interface CreateStudentRequest {
   blood_group?: string;
   genotype?: string;
   class_id?: string;
+  photo_url?: string;
   admission_date: string;
 }
 

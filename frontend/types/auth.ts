@@ -10,6 +10,7 @@ export interface AuthUser {
   membership_id: string;
   is_first_login: boolean;
   profile_photo_url?: string;
+  current_class_id?: string;
 }
 
 export interface TokenResponse {

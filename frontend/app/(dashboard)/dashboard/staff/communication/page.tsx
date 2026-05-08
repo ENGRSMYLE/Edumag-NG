@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   MessageSquare,
   Plus,
@@ -8,75 +9,65 @@ import {
   X,
   Info,
   Clock,
+  ArrowLeft,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
 import { createPortal } from 'react-dom';
 
 import { PageHeader } from '@/components/shared/PageHeader';
+import { communicationApi } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
+import type { MessageResponse } from '@/types/communication';
 
 // ---------------------------------------------------------------------------
-// Types + mock data
+// Unified message view type
 // ---------------------------------------------------------------------------
 
-interface Message {
+interface DisplayMessage {
   id: string;
   subject: string;
   body: string;
   sent_at: string;
   is_read: boolean;
-  sender_name: string;
-  recipient_name: string;
+  other_party: string;
   direction: 'sent' | 'received';
 }
 
-const MOCK_MESSAGES: Message[] = [
-  {
-    id: 'msg-1',
-    subject: 'Request for class projector',
-    body: 'Good morning. I would like to request the use of the projector in Room 4 for my Math lesson on Friday, 2nd May at 9 AM. Please let me know if it is available.',
-    sent_at: '2026-04-27T09:15:00',
-    is_read: true,
-    sender_name: 'You',
-    recipient_name: 'Admin',
-    direction: 'sent',
-  },
-  {
-    id: 'msg-2',
-    subject: 'Approved — Projector booking',
-    body: 'Hello, your request for the projector in Room 4 on Friday has been approved. Please collect the remote from the office before your lesson.',
-    sent_at: '2026-04-27T11:40:00',
-    is_read: true,
-    sender_name: 'Admin',
-    recipient_name: 'You',
-    direction: 'received',
-  },
-  {
-    id: 'msg-3',
-    subject: 'Student welfare concern — Obinna Dibia',
-    body: 'I am writing to flag a welfare concern regarding Obinna Dibia in JSS 3A. He has been unusually withdrawn this week and missed two consecutive classes. Please advise on the appropriate steps.',
-    sent_at: '2026-04-28T14:30:00',
-    is_read: false,
-    sender_name: 'You',
-    recipient_name: 'Admin',
-    direction: 'sent',
-  },
-];
+function toDisplay(msg: MessageResponse, myId: string): DisplayMessage {
+  const isReceived = msg.recipient_id === myId;
+  return {
+    id: msg.id,
+    subject: msg.subject ?? '(no subject)',
+    body: msg.body,
+    sent_at: msg.created_at,
+    is_read: msg.is_read,
+    other_party: isReceived ? msg.sender_name : msg.recipient_name,
+    direction: isReceived ? 'received' : 'sent',
+  };
+}
 
 // ---------------------------------------------------------------------------
 // New Message Modal
 // ---------------------------------------------------------------------------
 
-interface NewMessageModalProps {
-  onClose: () => void;
-  onSend: (subject: string, body: string) => void;
+interface Recipient {
+  id: string;
+  name: string;
+  role: string;
 }
 
-function NewMessageModal({ onClose, onSend }: NewMessageModalProps) {
+interface NewMessageModalProps {
+  recipients: Recipient[];
+  onClose: () => void;
+}
+
+function NewMessageModal({ recipients, onClose }: NewMessageModalProps) {
+  const adminId = recipients[0]?.id ?? '';
   const [mounted, setMounted] = useState(false);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [sending, setSending] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     setMounted(true);
@@ -84,30 +75,39 @@ function NewMessageModal({ onClose, onSend }: NewMessageModalProps) {
     return () => { document.body.style.overflow = ''; };
   }, []);
 
-  const handleSend = async () => {
+  const { mutate: sendMessage, isPending: sending } = useMutation({
+    mutationFn: () => communicationApi.sendMessage({ recipient_id: adminId, subject, body }).then((r) => r.data),
+    onSuccess: () => {
+      toast.success('Message sent to admin');
+      queryClient.invalidateQueries({ queryKey: ['messages', 'inbox'] });
+      queryClient.invalidateQueries({ queryKey: ['messages', 'sent'] });
+      queryClient.invalidateQueries({ queryKey: ['unread-count'] });
+      onClose();
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.detail ?? 'Failed to send message';
+      toast.error(typeof msg === 'string' ? msg : 'Failed to send message');
+    },
+  });
+
+  const handleSend = () => {
     if (!subject.trim()) { toast.error('Please enter a subject'); return; }
     if (!body.trim()) { toast.error('Please write your message'); return; }
-    setSending(true);
-    await new Promise((r) => setTimeout(r, 600));
-    onSend(subject.trim(), body.trim());
-    setSending(false);
+    sendMessage();
   };
 
   if (!mounted) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* Double-bezel shell */}
       <div className="relative z-10 bg-black/5 ring-1 ring-black/8 p-1.5 rounded-[1.75rem] w-full max-w-lg shadow-2xl">
         <div className="bg-white rounded-[calc(1.75rem-0.375rem)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.9)]">
-          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-[var(--color-navy)]/8 flex items-center justify-center">
@@ -115,7 +115,7 @@ function NewMessageModal({ onClose, onSend }: NewMessageModalProps) {
               </div>
               <div>
                 <p className="text-sm font-semibold text-[var(--color-text-primary)]">New Message</p>
-                <p className="text-[11px] text-[var(--color-text-muted)]">To: School Admin</p>
+                <p className="text-[11px] text-[var(--color-text-muted)]">To: {recipients[0]?.name ?? 'School Admin'}</p>
               </div>
             </div>
             <button
@@ -129,7 +129,6 @@ function NewMessageModal({ onClose, onSend }: NewMessageModalProps) {
           </div>
 
           <div className="px-6 py-5 flex flex-col gap-4">
-            {/* Note */}
             <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-blue-50 ring-1 ring-blue-100">
               <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
               <p className="text-xs text-blue-700">
@@ -137,7 +136,6 @@ function NewMessageModal({ onClose, onSend }: NewMessageModalProps) {
               </p>
             </div>
 
-            {/* Subject */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-[var(--color-text-primary)]">
                 Subject <span className="text-red-500">*</span>
@@ -158,7 +156,6 @@ function NewMessageModal({ onClose, onSend }: NewMessageModalProps) {
               />
             </div>
 
-            {/* Body */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-[var(--color-text-primary)]">
                 Message <span className="text-red-500">*</span>
@@ -182,7 +179,6 @@ function NewMessageModal({ onClose, onSend }: NewMessageModalProps) {
             </div>
           </div>
 
-          {/* Footer */}
           <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--color-border)]">
             <button
               type="button"
@@ -232,7 +228,7 @@ function MessageRow({
   selected,
   onClick,
 }: {
-  message: Message;
+  message: DisplayMessage;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -258,7 +254,7 @@ function MessageRow({
             !message.is_read && 'font-semibold text-[var(--color-text-primary)]',
           )}
         >
-          {isReceived ? message.sender_name : `To: ${message.recipient_name}`}
+          {isReceived ? message.other_party : `To: ${message.other_party}`}
         </span>
         <span className="text-[10px] text-[var(--color-text-muted)] flex-shrink-0 flex items-center gap-0.5">
           <Clock className="w-2.5 h-2.5" strokeWidth={1.5} />
@@ -292,35 +288,56 @@ function MessageRow({
 // ---------------------------------------------------------------------------
 
 export default function StaffCommunicationPage() {
-  const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
-  const [selectedId, setSelectedId] = useState<string | null>(MOCK_MESSAGES[0]?.id ?? null);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
 
+  // Get users this teacher is allowed to message (admins / super_admins)
+  const { data: recipients = [] } = useQuery({
+    queryKey: ['communication-recipients'],
+    queryFn: () => communicationApi.getRecipients().then((r) => r.data),
+    staleTime: 300_000,
+  });
+
+  const adminId = recipients[0]?.id ?? '';
+
+  // Fetch inbox + sent
+  const { data: inboxData, isLoading: inboxLoading } = useQuery({
+    queryKey: ['messages', 'inbox'],
+    queryFn: () => communicationApi.getInbox({ per_page: 50 }).then((r) => r.data),
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const { data: sentData, isLoading: sentLoading } = useQuery({
+    queryKey: ['messages', 'sent'],
+    queryFn: () => communicationApi.getSent({ per_page: 50 }).then((r) => r.data),
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const { mutate: markRead } = useMutation({
+    mutationFn: (id: string) => communicationApi.markRead(id).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', 'inbox'] });
+      queryClient.invalidateQueries({ queryKey: ['unread-count'] });
+    },
+  });
+
+  // Combine and sort
+  const messages = useMemo<DisplayMessage[]>(() => {
+    const myId = user?.id ?? '';
+    const inbox = (inboxData?.items ?? []).map((m) => toDisplay(m, myId));
+    const sent = (sentData?.items ?? []).map((m) => toDisplay(m, myId));
+    const all = [...inbox, ...sent];
+    all.sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime());
+    return all;
+  }, [inboxData, sentData, user?.id]);
+
+  const isLoading = inboxLoading || sentLoading;
   const selected = messages.find((m) => m.id === selectedId) ?? null;
   const unreadCount = messages.filter((m) => !m.is_read && m.direction === 'received').length;
-
-  const handleSend = (subject: string, body: string) => {
-    const newMsg: Message = {
-      id: `msg-${Date.now()}`,
-      subject,
-      body,
-      sent_at: new Date().toISOString(),
-      is_read: true,
-      sender_name: 'You',
-      recipient_name: 'Admin',
-      direction: 'sent',
-    };
-    setMessages((prev) => [newMsg, ...prev]);
-    setSelectedId(newMsg.id);
-    setShowModal(false);
-    toast.success('Message sent to admin');
-  };
-
-  const markRead = (id: string) => {
-    setMessages((prev) =>
-      prev.map((m) => m.id === id ? { ...m, is_read: true } : m),
-    );
-  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -331,10 +348,11 @@ export default function StaffCommunicationPage() {
           <button
             type="button"
             onClick={() => setShowModal(true)}
+            disabled={!adminId}
             className={clsx(
               'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer',
               'bg-[var(--color-navy)] text-white hover:bg-[var(--color-navy-mid)]',
-              'transition-colors duration-150',
+              'transition-colors duration-150 disabled:opacity-50',
             )}
           >
             <Plus className="w-4 h-4" strokeWidth={2} />
@@ -343,7 +361,6 @@ export default function StaffCommunicationPage() {
         }
       />
 
-      {/* Info banner */}
       <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-blue-50 ring-1 ring-blue-100">
         <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
         <p className="text-sm text-blue-700">
@@ -351,12 +368,14 @@ export default function StaffCommunicationPage() {
         </p>
       </div>
 
-      {/* Split panel */}
       <div className="card-shell">
         <div className="card-core">
-          <div className="flex min-h-[500px] divide-x divide-[var(--color-border)]">
-            {/* Left: message list */}
-            <div className="w-full max-w-xs flex-shrink-0 flex flex-col">
+          <div className="flex flex-col sm:flex-row min-h-[500px] sm:divide-x divide-[var(--color-border)]">
+            {/* Left: message list — hidden on mobile when a message is selected */}
+            <div className={clsx(
+              'sm:w-full sm:max-w-xs flex-shrink-0 flex flex-col',
+              selected && 'hidden sm:flex',
+            )}>
               <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between">
                 <span className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-[0.08em]">
                   Inbox
@@ -368,7 +387,16 @@ export default function StaffCommunicationPage() {
                 )}
               </div>
 
-              {messages.length === 0 ? (
+              {isLoading ? (
+                <div className="p-4 space-y-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="space-y-1.5">
+                      <div className="skeleton h-3 w-24 rounded" />
+                      <div className="skeleton h-4 w-full rounded" />
+                    </div>
+                  ))}
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center gap-2 p-6 text-center">
                   <MessageSquare className="w-8 h-8 text-[var(--color-text-muted)]" strokeWidth={1} />
                   <p className="text-sm text-[var(--color-text-muted)]">No messages yet</p>
@@ -382,7 +410,7 @@ export default function StaffCommunicationPage() {
                       selected={msg.id === selectedId}
                       onClick={() => {
                         setSelectedId(msg.id);
-                        if (!msg.is_read) markRead(msg.id);
+                        if (!msg.is_read && msg.direction === 'received') markRead(msg.id);
                       }}
                     />
                   ))}
@@ -390,23 +418,30 @@ export default function StaffCommunicationPage() {
               )}
             </div>
 
-            {/* Right: thread view */}
-            <div className="flex-1 min-w-0 flex flex-col">
+            {/* Right: thread view — full-width on mobile when selected */}
+            <div className={clsx('flex-1 min-w-0 flex flex-col', !selected && 'hidden sm:flex')}>
               {selected ? (
                 <>
-                  {/* Thread header */}
-                  <div className="px-6 py-4 border-b border-[var(--color-border)]">
+                  <div className="px-4 sm:px-6 py-4 border-b border-[var(--color-border)]">
+                    {/* Mobile back button */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(null)}
+                      className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-navy)] mb-2 sm:hidden cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" strokeWidth={2} />
+                      Back to messages
+                    </button>
                     <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
                       {selected.subject}
                     </h3>
                     <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
                       {selected.direction === 'sent'
-                        ? `Sent to Admin · ${new Date(selected.sent_at).toLocaleString('en-NG')}`
-                        : `From Admin · ${new Date(selected.sent_at).toLocaleString('en-NG')}`}
+                        ? `Sent to ${selected.other_party} · ${new Date(selected.sent_at).toLocaleString('en-NG')}`
+                        : `From ${selected.other_party} · ${new Date(selected.sent_at).toLocaleString('en-NG')}`}
                     </p>
                   </div>
 
-                  {/* Message body */}
                   <div className="flex-1 p-6">
                     <div
                       className={clsx(
@@ -420,7 +455,6 @@ export default function StaffCommunicationPage() {
                     </div>
                   </div>
 
-                  {/* Quick reply hint */}
                   <div className="px-6 py-4 border-t border-[var(--color-border)]">
                     <button
                       type="button"
@@ -448,10 +482,10 @@ export default function StaffCommunicationPage() {
         </div>
       </div>
 
-      {showModal && (
+      {showModal && adminId && (
         <NewMessageModal
+          recipients={recipients}
           onClose={() => setShowModal(false)}
-          onSend={handleSend}
         />
       )}
     </div>

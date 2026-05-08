@@ -15,9 +15,8 @@ if TYPE_CHECKING:
 
 class TargetAudience(str, enum.Enum):
     all = "all"
-    teachers = "teachers"
-    parents = "parents"
-    students = "students"
+    admin = "admin"
+    teacher = "teacher"
 
 
 class Announcement(Base):

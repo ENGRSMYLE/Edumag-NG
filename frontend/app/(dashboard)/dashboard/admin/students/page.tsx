@@ -14,7 +14,7 @@ import { getInitials, formatDate } from '@/lib/formatters';
 import type { StudentListItem } from '@/types/student';
 
 function StudentNameCell({ row }: { row: StudentListItem }) {
-  const fullName = `${row.first_name} ${row.last_name}`;
+  const fullName = row.full_name || `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim() || 'Unknown';
   return (
     <div className="flex items-center gap-2.5">
       <div className="w-7 h-7 rounded-full bg-[var(--color-gold)]/15 flex items-center justify-center flex-shrink-0">
@@ -52,7 +52,7 @@ export default function AdminStudentsPage() {
 
   const { data: classes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.list().then((r) => r.data),
+    queryFn: () => classesApi.list().then((r) => r.data.items),
     staleTime: 120_000,
     retry: 1,
   });
@@ -85,6 +85,7 @@ export default function AdminStudentsPage() {
     {
       key: 'gender',
       header: 'Gender',
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-secondary)] capitalize">{String(v)}</span>
       ),
@@ -102,6 +103,7 @@ export default function AdminStudentsPage() {
       key: 'admission_date',
       header: 'Date Admitted',
       sortable: true,
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-muted)] font-mono tabular-nums">
           {v ? formatDate(String(v)) : '—'}

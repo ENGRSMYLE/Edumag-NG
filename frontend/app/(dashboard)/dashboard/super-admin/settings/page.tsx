@@ -1,13 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useDropzone } from 'react-dropzone';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
-  Upload,
   Save,
   Plus,
   Check,
@@ -20,6 +18,7 @@ import toast from 'react-hot-toast';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { FileUpload } from '@/components/shared/FileUpload';
 import { settingsApi } from '@/lib/api';
 import type { SchoolSettings, GradeScale, AcademicTerm } from '@/types/dashboard';
 
@@ -60,17 +59,15 @@ const profileSchema = z.object({
   phone:       z.string().optional(),
   email:       z.string().email('Invalid email').optional().or(z.literal('')),
   motto:       z.string().optional(),
+  logo_url:    z.string().optional(),
 });
 
 type ProfileForm = z.infer<typeof profileSchema>;
 
 function ProfileTab({ settings }: { settings: SchoolSettings | undefined }) {
   const queryClient = useQueryClient();
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string | null>(settings?.logo_url ?? null);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
 
-  const { register, handleSubmit, formState: { errors, isDirty } } = useForm<ProfileForm>({
+  const { register, handleSubmit, setValue, watch, formState: { errors, isDirty } } = useForm<ProfileForm>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
       name:        settings?.name ?? '',
@@ -79,23 +76,15 @@ function ProfileTab({ settings }: { settings: SchoolSettings | undefined }) {
       phone:       settings?.phone ?? '',
       email:       settings?.email ?? '',
       motto:       settings?.motto ?? '',
+      logo_url:    settings?.logo_url ?? '',
     },
   });
 
   const { mutate: save, isPending } = useMutation({
-    mutationFn: async (data: ProfileForm) => {
-      if (logoFile) {
-        setUploadingLogo(true);
-        try {
-          const { data: logoData } = await settingsApi.uploadLogo(logoFile);
-          await settingsApi.updateSchool({ ...data, logo_url: logoData.url });
-        } finally {
-          setUploadingLogo(false);
-        }
-      } else {
-        await settingsApi.updateSchool(data);
-      }
-    },
+    mutationFn: (data: ProfileForm) => settingsApi.updateSchool({
+      ...data,
+      logo_url: data.logo_url || undefined,
+    }),
     onSuccess: () => {
       toast.success('School profile updated');
       queryClient.invalidateQueries({ queryKey: ['settings', 'school'] });
@@ -103,56 +92,19 @@ function ProfileTab({ settings }: { settings: SchoolSettings | undefined }) {
     onError: () => toast.error('Failed to save changes'),
   });
 
-  const onDrop = useCallback((files: File[]) => {
-    const file = files[0];
-    if (!file) return;
-    setLogoFile(file);
-    setLogoPreview(URL.createObjectURL(file));
-  }, []);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.svg'] },
-    maxFiles: 1,
-    maxSize: 2 * 1024 * 1024,
-  });
-
   return (
     <form onSubmit={handleSubmit((d) => save(d))} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Logo upload */}
         <div className="md:col-span-2">
-          <label className={labelCx}>School Logo</label>
-          <div className="flex items-start gap-4">
-            {logoPreview ? (
-              <img
-                src={logoPreview}
-                alt="School logo"
-                className="w-16 h-16 rounded-xl object-contain border border-[var(--color-border)] bg-[var(--color-surface)] p-1 flex-shrink-0"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] flex items-center justify-center flex-shrink-0">
-                <Upload className="w-5 h-5 text-[var(--color-text-muted)]" strokeWidth={1.5} />
-              </div>
-            )}
-            <div
-              {...getRootProps()}
-              className={clsx(
-                'flex-1 border-2 border-dashed rounded-xl px-4 py-5 text-center cursor-pointer',
-                'transition-all duration-200',
-                isDragActive
-                  ? 'border-[var(--color-gold)] bg-[var(--color-gold)]/5'
-                  : 'border-[var(--color-border)] hover:border-[var(--color-gold)]/50 hover:bg-[var(--color-surface)]',
-              )}
-            >
-              <input {...getInputProps()} />
-              <Upload className="w-5 h-5 text-[var(--color-text-muted)] mx-auto mb-1.5" strokeWidth={1.5} />
-              <p className="text-sm text-[var(--color-text-muted)]">
-                {isDragActive ? 'Drop image here' : 'Drag & drop or click to upload'}
-              </p>
-              <p className="text-xs text-[var(--color-text-muted)]/70 mt-0.5">PNG, JPG, SVG up to 2MB</p>
-            </div>
-          </div>
+          <FileUpload
+            folder="schools"
+            accept="image/*"
+            maxSize={1024 * 1024}
+            label="School Logo"
+            currentUrl={watch('logo_url')}
+            onUpload={(url) => setValue('logo_url', url, { shouldDirty: true })}
+          />
         </div>
 
         {/* School name */}
@@ -201,7 +153,7 @@ function ProfileTab({ settings }: { settings: SchoolSettings | undefined }) {
       <div className="flex justify-end pt-2 border-t border-[var(--color-border)]">
         <button
           type="submit"
-          disabled={isPending || uploadingLogo || !isDirty && !logoFile}
+          disabled={isPending || !isDirty}
           className={clsx(
             'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer',
             'bg-[var(--color-navy)] text-white',
@@ -210,7 +162,7 @@ function ProfileTab({ settings }: { settings: SchoolSettings | undefined }) {
             'disabled:opacity-60 disabled:cursor-not-allowed',
           )}
         >
-          {(isPending || uploadingLogo) && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
           <Save className="w-3.5 h-3.5" strokeWidth={1.5} />
           Save Changes
         </button>

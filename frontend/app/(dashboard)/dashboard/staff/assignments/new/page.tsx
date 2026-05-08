@@ -1,22 +1,20 @@
 'use client';
 
-import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ClipboardList,
   ArrowLeft,
-  Upload,
-  X,
-  FileText,
 } from 'lucide-react';
-import { useDropzone } from 'react-dropzone';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
 
 import { PageHeader } from '@/components/shared/PageHeader';
+import { FileUpload } from '@/components/shared/FileUpload';
+import { assignmentsApi } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -44,82 +42,10 @@ const schema = z.object({
     .number({ invalid_type_error: 'Enter a valid score' })
     .min(1, 'Min score is 1')
     .max(100, 'Max score is 100'),
+  file_url:    z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
-
-// ---------------------------------------------------------------------------
-// File drop zone
-// ---------------------------------------------------------------------------
-
-interface FileDropProps {
-  file: File | null;
-  onDrop: (file: File) => void;
-  onClear: () => void;
-}
-
-function FileDropZone({ file, onDrop, onClear }: FileDropProps) {
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: { 'application/pdf': ['.pdf'], 'application/msword': ['.doc', '.docx'] },
-    maxFiles: 1,
-    onDrop: (accepted) => { if (accepted[0]) onDrop(accepted[0]); },
-  });
-
-  if (file) {
-    return (
-      <div className={clsx(
-        'flex items-center justify-between px-4 py-3 rounded-xl',
-        'bg-[var(--color-surface)] border border-[var(--color-gold)]/40',
-      )}>
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-[var(--color-gold)]/12 flex items-center justify-center flex-shrink-0">
-            <FileText className="w-4.5 h-4.5 text-[var(--color-gold)]" strokeWidth={1.5} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{file.name}</p>
-            <p className="text-xs text-[var(--color-text-muted)]">
-              {(file.size / 1024).toFixed(1)} KB
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onClear}
-          className="p-1 rounded-md text-[var(--color-text-muted)] hover:text-red-500 hover:bg-red-50 cursor-pointer transition-all duration-150"
-          aria-label="Remove file"
-        >
-          <X className="w-4 h-4" strokeWidth={2} />
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      {...getRootProps()}
-      className={clsx(
-        'flex flex-col items-center gap-2 px-6 py-8 rounded-xl border-2 border-dashed cursor-pointer',
-        'transition-all duration-200',
-        isDragActive
-          ? 'border-[var(--color-gold)] bg-[var(--color-gold)]/5'
-          : 'border-[var(--color-border)] hover:border-[var(--color-navy)]/30 hover:bg-[var(--color-surface)]',
-      )}
-    >
-      <input {...getInputProps()} />
-      <div className="w-10 h-10 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center">
-        <Upload className="w-4.5 h-4.5 text-[var(--color-text-muted)]" strokeWidth={1.5} />
-      </div>
-      <div className="text-center">
-        <p className="text-sm font-medium text-[var(--color-text-primary)]">
-          {isDragActive ? 'Drop file here' : 'Drag & drop a file'}
-        </p>
-        <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-          PDF or Word document · Max 10 MB
-        </p>
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Field wrapper
@@ -157,30 +83,42 @@ const inputCls = clsx(
 
 export default function NewAssignmentPage() {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const queryClient = useQueryClient();
 
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { max_score: 100 },
   });
 
-  const onSubmit = async (values: FormValues) => {
-    setIsSubmitting(true);
-    try {
-      // TODO: call assignmentsApi.create(values) once backend is ready
-      await new Promise((r) => setTimeout(r, 800));
+  const { mutate: createAssignment, isPending: isSubmitting } = useMutation({
+    mutationFn: (data: Parameters<typeof assignmentsApi.create>[0]) =>
+      assignmentsApi.create(data).then((r) => r.data),
+    onSuccess: () => {
       toast.success('Assignment created successfully');
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
       router.push('/dashboard/staff/assignments');
-    } catch {
-      toast.error('Failed to create assignment. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.detail ?? 'Failed to create assignment';
+      toast.error(typeof msg === 'string' ? msg : 'Failed to create assignment');
+    },
+  });
+
+  const onSubmit = (values: FormValues) => {
+    createAssignment({
+      title: values.title,
+      subject: values.subject,
+      description: values.description,
+      due_date: values.due_date,
+      max_score: values.max_score,
+      file_url: values.file_url || undefined,
+    });
   };
 
   const today = new Date().toISOString().split('T')[0];
@@ -277,13 +215,14 @@ export default function NewAssignmentPage() {
             </Field>
 
             {/* File upload */}
-            <Field label="Attachment (optional)">
-              <FileDropZone
-                file={file}
-                onDrop={setFile}
-                onClear={() => setFile(null)}
-              />
-            </Field>
+            <FileUpload
+              folder="assignments"
+              accept=".pdf,.doc,.docx"
+              maxSize={10 * 1024 * 1024}
+              label="Attachment (optional)"
+              currentUrl={watch('file_url')}
+              onUpload={(url) => setValue('file_url', url)}
+            />
           </div>
         </div>
 

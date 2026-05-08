@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { RefreshCw, Loader2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
+import { FileUpload } from '@/components/shared/FileUpload';
 import { studentsApi, classesApi } from '@/lib/api';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -34,6 +35,7 @@ const schema = z.object({
   blood_group: z.string().optional(),
   genotype: z.string().optional(),
   address: z.string().optional(),
+  photo_url: z.string().optional(),
   admission_number: z.string().min(1, 'Admission number is required'),
   admission_date: z.string().min(1, 'Admission date is required'),
   class_id: z.string().optional(),
@@ -82,7 +84,7 @@ export default function AdminNewStudentPage() {
 
   const { data: classes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.list().then((r) => r.data),
+    queryFn: () => classesApi.list().then((r) => r.data.items),
     staleTime: 120_000,
   });
 
@@ -112,6 +114,7 @@ export default function AdminNewStudentPage() {
         blood_group: data.blood_group || undefined,
         genotype: data.genotype || undefined,
         class_id: data.class_id || undefined,
+        photo_url: data.photo_url || undefined,
       });
     },
     onSuccess: (res) => {
@@ -223,6 +226,25 @@ export default function AdminNewStudentPage() {
                   ))}
                 </select>
               </Field>
+            </div>
+          </div>
+        </div>
+
+        {/* Photo */}
+        <div className="card-shell">
+          <div className="card-core p-5">
+            <h3 className="text-sm font-semibold text-[var(--color-text-primary)] font-display mb-4">
+              Student Photo
+            </h3>
+            <div className="max-w-xs">
+              <FileUpload
+                folder="students"
+                accept="image/*"
+                maxSize={2 * 1024 * 1024}
+                label="Passport Photo"
+                currentUrl={watch('photo_url')}
+                onUpload={(url) => setValue('photo_url', url)}
+              />
             </div>
           </div>
         </div>

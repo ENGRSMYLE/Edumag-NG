@@ -60,7 +60,26 @@ const schema = z
     phone: z
       .string()
       .min(1, 'Phone number is required')
-      .regex(/^0?[789][01]\d{8}$/, 'Enter a valid Nigerian number e.g. 08012345678'),
+      .refine(
+        (val) => /^\d+$/.test(val.replace(/[\s\-().]/g, '')),
+        'Only digits are allowed — no letters or special characters',
+      )
+      .refine(
+        (val) => val.replace(/\D/g, '').length >= 10,
+        'Too short — Nigerian numbers have 10 or 11 digits (e.g. 08012345678)',
+      )
+      .refine(
+        (val) => val.replace(/\D/g, '').length <= 11,
+        'Too long — Nigerian numbers have at most 11 digits',
+      )
+      .refine(
+        (val) => /^0?[789]/.test(val.replace(/\D/g, '')),
+        'Invalid network prefix — must start with 070, 080, or 090',
+      )
+      .refine(
+        (val) => /^0?[789]\d{9}$/.test(val.replace(/\D/g, '')),
+        'Not a valid Nigerian number — try 08012345678',
+      ),
     // Step 2
     admin_name: z.string().min(2, 'Your full name is required'),
     email: z.string().email('Enter a valid email address'),
@@ -127,7 +146,8 @@ export function SignupForm() {
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { school_type: undefined },
-    mode: 'onTouched',
+    mode: 'onBlur',
+    reValidateMode: 'onChange',
   });
 
   const schoolType = watch('school_type');
@@ -407,18 +427,29 @@ export function SignupForm() {
               School Phone Number
             </label>
             <div className="flex items-stretch gap-0">
-              <span className="flex items-center px-3.5 text-xs font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)] border border-[var(--color-border)] border-r-0 rounded-l-xl">
-                🇳🇬
+              <span className="flex items-center px-3.5 text-xs font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)] border border-[var(--color-border)] border-r-0 rounded-l-xl flex-shrink-0">
+                🇳🇬 +234
               </span>
               <input
                 {...register('phone')}
                 type="tel"
                 placeholder="08012345678"
+                maxLength={11}
                 className={clsx(inputCx(!!errors.phone), 'rounded-l-none border-l-0')}
+                onChange={(e) => {
+                  // Strip +234 or 234 prefix if pasted, then keep only digits
+                  let val = e.target.value.replace(/\D/g, '');
+                  if (val.startsWith('234')) val = '0' + val.slice(3);
+                  e.target.value = val;
+                  register('phone').onChange(e);
+                }}
               />
             </div>
             {errors.phone && (
-              <p className="text-xs text-red-500">{errors.phone.message}</p>
+              <p className="text-xs text-red-500 flex items-start gap-1">
+                <span className="mt-0.5 flex-shrink-0">⚠</span>
+                {errors.phone.message}
+              </p>
             )}
           </div>
 

@@ -2,8 +2,12 @@ export interface ClassListItem {
   id: string;
   name: string;
   level: string;
-  teacher_name?: string;
+  arm?: string | null;
+  teacher_name?: string | null;
   student_count?: number;
+  academic_session: string;
+  term: 'first' | 'second' | 'third';
+  is_active: boolean;
 }
 
 export interface StudentListParams {

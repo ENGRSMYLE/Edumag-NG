@@ -34,7 +34,7 @@ export default function AdminDebtorsPage() {
 
   const { data: classes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.list().then((r) => r.data),
+    queryFn: () => classesApi.list().then((r) => r.data.items),
     staleTime: 120_000,
   });
 
@@ -75,6 +75,7 @@ export default function AdminDebtorsPage() {
     {
       key: 'expected_kobo',
       header: 'Expected',
+      mobileHide: true,
       render: (v) => <CurrencyDisplay kobo={Number(v)} size="sm" />,
     },
     {
@@ -91,6 +92,7 @@ export default function AdminDebtorsPage() {
       key: 'last_payment_date',
       header: 'Last Payment',
       sortable: true,
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-muted)] font-mono tabular-nums">
           {v ? formatDate(String(v)) : '—'}

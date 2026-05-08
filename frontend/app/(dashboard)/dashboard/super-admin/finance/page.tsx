@@ -1,9 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Banknote, AlertCircle, CheckCircle2, Users } from 'lucide-react';
-import { clsx } from 'clsx';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatCard } from '@/components/shared/StatCard';
@@ -11,23 +9,22 @@ import { SkeletonCard } from '@/components/shared/LoadingSkeleton';
 import { DataTable, type Column } from '@/components/shared/DataTable';
 import { Badge } from '@/components/shared/Badge';
 import { CurrencyDisplay } from '@/components/shared/CurrencyDisplay';
-import { financeApi } from '@/lib/api';
+import { useFinancialSummary, usePayments } from '@/hooks/useFinance';
 import { formatDate } from '@/lib/formatters';
 import type { PaymentListItem, PaymentStatus, PaymentType, PaymentMethod } from '@/types/dashboard';
 
 const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
-  tuition: 'Tuition',
-  levy:    'Levy',
-  uniform: 'Uniform',
-  books:   'Books',
-  other:   'Other',
+  school_fees:       'School Fees',
+  development_levy:  'Development Levy',
+  exam_fees:         'Exam Fees',
+  other:             'Other',
 };
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
-  cash:     'Cash',
-  transfer: 'Transfer',
-  card:     'Card',
-  pos:      'POS',
+  cash:          'Cash',
+  bank_transfer: 'Bank Transfer',
+  paystack:      'Paystack',
+  pos:           'POS',
 };
 
 const STATUS_VARIANT: Record<PaymentStatus, 'success' | 'warning' | 'danger'> = {
@@ -40,19 +37,12 @@ export default function FinancePage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
 
-  const { data: statsData, isLoading: statsLoading } = useQuery({
-    queryKey: ['finance', 'stats'],
-    queryFn: () => financeApi.stats().then((r) => r.data),
-    staleTime: 30_000,
-    retry: 1,
-  });
+  const { data: statsData, isLoading: statsLoading } = useFinancialSummary();
 
-  const { data: paymentsData, isLoading: paymentsLoading } = useQuery({
-    queryKey: ['finance', 'payments', { page, search }],
-    queryFn: () =>
-      financeApi.payments({ page, per_page: 20, search: search || undefined }).then((r) => r.data),
-    staleTime: 30_000,
-    retry: 1,
+  const { data: paymentsData, isLoading: paymentsLoading } = usePayments({
+    page,
+    per_page: 20,
+    search: search || undefined,
   });
 
   const columns: Column<PaymentListItem>[] = [
@@ -81,6 +71,7 @@ export default function FinancePage() {
     {
       key: 'payment_method',
       header: 'Method',
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-secondary)]">
           {PAYMENT_METHOD_LABELS[v as PaymentMethod] ?? String(v)}
@@ -109,6 +100,7 @@ export default function FinancePage() {
     {
       key: 'confirmed_by',
       header: 'Confirmed By',
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-muted)]">
           {v ? String(v) : <span className="text-[var(--color-text-muted)]/50">—</span>}
@@ -134,21 +126,19 @@ export default function FinancePage() {
               title="Total Collected This Term"
               value={statsData ? `₦${(statsData.total_collected_kobo / 100).toLocaleString()}` : '₦0'}
               icon={Banknote}
-              change={statsData?.collected_change_pct}
-              changeLabel="vs last term"
               variant="success"
               delay={0}
             />
             <StatCard
               title="Outstanding Fees"
-              value={statsData ? `₦${(statsData.outstanding_kobo / 100).toLocaleString()}` : '₦0'}
+              value={statsData ? `₦${(statsData.total_outstanding_kobo / 100).toLocaleString()}` : '₦0'}
               icon={AlertCircle}
               variant="danger"
               delay={1}
             />
             <StatCard
-              title="Fully Paid Students"
-              value={statsData?.fully_paid_count ?? 0}
+              title="Confirmed Payments"
+              value={statsData?.confirmed_payments_count ?? 0}
               icon={CheckCircle2}
               variant="gold"
               delay={2}

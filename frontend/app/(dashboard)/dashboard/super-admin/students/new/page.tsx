@@ -56,7 +56,7 @@ export default function NewStudentPage() {
 
   const { data: classes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.list().then((r) => r.data),
+    queryFn: () => classesApi.list().then((r) => r.data.items),
     staleTime: 120_000,
   });
 

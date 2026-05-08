@@ -17,6 +17,8 @@ export interface Column<T> {
   header: string;
   sortable?: boolean;
   className?: string;
+  /** Hide this column below the sm breakpoint (640px) */
+  mobileHide?: boolean;
   render?: (value: unknown, row: T) => ReactNode;
 }
 
@@ -79,7 +81,7 @@ export function DataTable<T extends object>({
   const totalPages = Math.ceil(totalCount / perPage);
   const showPagination = totalPages > 1 && !!onPageChange;
 
-  // Build a window of up to 5 page buttons around the current page
+  // Show only prev/next + current page on mobile; full window on sm+
   const pageWindow = (() => {
     if (totalPages <= 5) return Array.from({ length: totalPages }, (_, i) => i + 1);
     if (page <= 3) return [1, 2, 3, 4, 5];
@@ -89,11 +91,11 @@ export function DataTable<T extends object>({
 
   return (
     <div className="flex flex-col gap-0">
-      {/* Toolbar */}
+      {/* Toolbar — stacks vertically on mobile */}
       {(onSearch || actions) && (
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
           {onSearch && (
-            <div className="relative flex-1 max-w-xs">
+            <div className="relative w-full sm:flex-1 sm:max-w-xs">
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]"
                 strokeWidth={1.5}
@@ -104,7 +106,7 @@ export function DataTable<T extends object>({
                 onChange={(e) => handleSearch(e.target.value)}
                 placeholder={searchPlaceholder}
                 className={clsx(
-                  'w-full pl-9 pr-3 py-2 text-sm rounded-lg',
+                  'w-full pl-9 pr-3 py-2.5 sm:py-2 text-sm rounded-lg',
                   'bg-[var(--color-surface)] border border-[var(--color-border)]',
                   'text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)]',
                   'focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]',
@@ -114,12 +116,12 @@ export function DataTable<T extends object>({
             </div>
           )}
           {actions && (
-            <div className="flex items-center gap-2 ml-auto">{actions}</div>
+            <div className="flex items-center gap-2 sm:ml-auto flex-wrap">{actions}</div>
           )}
         </div>
       )}
 
-      {/* Table shell */}
+      {/* Table shell — scrolls horizontally on small screens */}
       <div className="rounded-xl border border-[var(--color-border)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -133,6 +135,7 @@ export function DataTable<T extends object>({
                       'px-4 py-3 text-left text-xs font-semibold text-white/80 tracking-wide select-none whitespace-nowrap',
                       col.sortable &&
                         'cursor-pointer hover:text-white transition-colors duration-150',
+                      col.mobileHide && 'hidden sm:table-cell',
                       col.className,
                     )}
                   >
@@ -171,7 +174,10 @@ export function DataTable<T extends object>({
                 Array.from({ length: SKELETON_ROWS }).map((_, i) => (
                   <tr key={i} className={i % 2 === 0 ? 'bg-[var(--color-cream)]' : 'bg-white'}>
                     {columns.map((col) => (
-                      <td key={String(col.key)} className="px-4 py-3">
+                      <td
+                        key={String(col.key)}
+                        className={clsx('px-4 py-3', col.mobileHide && 'hidden sm:table-cell')}
+                      >
                         <div className="skeleton h-4 rounded" />
                       </td>
                     ))}
@@ -203,6 +209,7 @@ export function DataTable<T extends object>({
                         key={String(col.key)}
                         className={clsx(
                           'px-4 py-3 text-[var(--color-text-primary)]',
+                          col.mobileHide && 'hidden sm:table-cell',
                           col.className,
                         )}
                       >
@@ -221,8 +228,8 @@ export function DataTable<T extends object>({
 
       {/* Pagination */}
       {showPagination && (
-        <div className="flex items-center justify-between mt-4 text-sm text-[var(--color-text-muted)]">
-          <span>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 text-sm text-[var(--color-text-muted)]">
+          <span className="text-center sm:text-left">
             Showing{' '}
             <span className="font-medium text-[var(--color-text-primary)]">
               {Math.min((page - 1) * perPage + 1, totalCount)}
@@ -235,7 +242,7 @@ export function DataTable<T extends object>({
             <span className="font-medium text-[var(--color-text-primary)]">{totalCount}</span>
           </span>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center justify-center gap-1">
             <button
               onClick={() => onPageChange(page - 1)}
               disabled={page <= 1}
@@ -243,19 +250,21 @@ export function DataTable<T extends object>({
                 'p-1.5 rounded-lg transition-all duration-150',
                 page <= 1
                   ? 'text-[var(--color-text-muted)] cursor-not-allowed opacity-40'
-                  : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] active:scale-95',
+                  : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] active:scale-95 cursor-pointer',
               )}
               aria-label="Previous page"
             >
               <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
             </button>
 
+            {/* On mobile show only current/adjacent; on sm+ show full window */}
             {pageWindow.map((num) => (
               <button
                 key={num}
                 onClick={() => onPageChange(num)}
                 className={clsx(
-                  'w-8 h-8 rounded-lg text-xs font-medium transition-all duration-150',
+                  'w-8 h-8 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer',
+                  Math.abs(num - page) > 1 && 'hidden sm:flex sm:items-center sm:justify-center',
                   num === page
                     ? 'bg-[var(--color-navy)] text-white'
                     : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] active:scale-95',
@@ -272,7 +281,7 @@ export function DataTable<T extends object>({
                 'p-1.5 rounded-lg transition-all duration-150',
                 page >= totalPages
                   ? 'text-[var(--color-text-muted)] cursor-not-allowed opacity-40'
-                  : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] active:scale-95',
+                  : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] active:scale-95 cursor-pointer',
               )}
               aria-label="Next page"
             >

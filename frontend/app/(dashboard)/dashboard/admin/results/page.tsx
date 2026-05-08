@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileBarChart, Loader2, CheckCircle2, Clock, FileCheck } from 'lucide-react';
+import { Loader2, FileCheck, Download, FileDown } from 'lucide-react';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -10,19 +10,21 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { DataTable, type Column } from '@/components/shared/DataTable';
 import { Badge } from '@/components/shared/Badge';
 import { resultsApi, classesApi } from '@/lib/api';
-import { getCurrentSession, formatTerm } from '@/lib/formatters';
-import type { ResultListItem, ResultStatus } from '@/types/dashboard';
+import type { ResultSummary } from '@/lib/api';
+import { getCurrentSession } from '@/lib/formatters';
+import { useReportCardPDF } from '@/hooks/useReportCardPDF';
+import type { ResultStatus } from '@/types/dashboard';
 
 const TERMS = [
-  { value: 'first', label: 'First Term' },
+  { value: 'first',  label: 'First Term'  },
   { value: 'second', label: 'Second Term' },
-  { value: 'third', label: 'Third Term' },
+  { value: 'third',  label: 'Third Term'  },
 ];
 
 const STATUS_CONFIG: Record<ResultStatus, { label: string; variant: 'neutral' | 'warning' | 'success' | 'info' }> = {
   pending:   { label: 'Pending',   variant: 'warning' },
   approved:  { label: 'Approved',  variant: 'success' },
-  generated: { label: 'Generated', variant: 'info' },
+  generated: { label: 'Generated', variant: 'info'    },
 };
 
 function ScoreProgress({ entered, total }: { entered: number; total: number }) {
@@ -45,14 +47,39 @@ function ScoreProgress({ entered, total }: { entered: number; total: number }) {
   );
 }
 
+interface ResultRow {
+  id: string;
+  student_name: string;
+  student_id: string;
+  class_name: string;
+  subjects_entered: number;
+  subjects_total: number;
+  comments?: string;
+  status: ResultStatus;
+}
+
+function deriveStatus(summary: ResultSummary): ResultStatus {
+  if (summary.subjects.length === 0) return 'pending';
+  return summary.subjects.every((s) => s.is_approved) ? 'approved' : 'pending';
+}
+
+const filterCls = clsx(
+  'text-sm rounded-lg px-3 py-1.5',
+  'bg-[var(--color-surface)] border border-[var(--color-border)]',
+  'text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)]',
+  'focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)]/30',
+  'transition-all duration-150',
+);
+
 export default function AdminResultsPage() {
-  const [session, setSession] = useState('');
-  const [term, setTerm] = useState('first');
-  const [classFilter, setClassFilter] = useState('');
+  const [session, setSession]           = useState('');
+  const [term, setTerm]                 = useState('first');
+  const [classFilter, setClassFilter]   = useState('');
   const [statusFilter, setStatusFilter] = useState<ResultStatus | ''>('');
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const [generating, setGenerating] = useState(false);
+  const [search, setSearch]             = useState('');
+  const [approving, setApproving]       = useState(false);
+
+  const { generateSingle, generateBulk, isGeneratingId, isBulkGenerating } = useReportCardPDF();
 
   useEffect(() => {
     setSession(getCurrentSession());
@@ -60,65 +87,95 @@ export default function AdminResultsPage() {
 
   const { data: classes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.list().then((r) => r.data),
+    queryFn: () => classesApi.list().then((r) => r.data.items),
     staleTime: 120_000,
   });
 
-  const queryParams = {
-    page,
-    per_page: 20,
-    session: session || undefined,
-    term: term || undefined,
-    class_id: classFilter || undefined,
-    status: statusFilter || undefined,
-  };
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['results', 'report', queryParams],
-    queryFn: () => resultsApi.report(queryParams).then((r) => r.data),
+  const { data: rawData, isLoading } = useQuery({
+    queryKey: ['results', 'report-cards', { classFilter, session, term }],
+    queryFn: () =>
+      resultsApi.classReportCards(classFilter, { academic_session: session, term }).then((r) => r.data),
     staleTime: 30_000,
     retry: 1,
-    enabled: !!session,
+    enabled: !!session && !!classFilter,
   });
 
-  const handleGenerate = async () => {
-    setGenerating(true);
+  const rows: ResultRow[] = useMemo(() => {
+    if (!rawData) return [];
+    const maxSubjects = Math.max(...rawData.map((s) => s.subjects.length), 1);
+    return rawData.map((s) => ({
+      id:               s.student_id,
+      student_name:     s.student_name,
+      student_id:       s.student_id,
+      class_name:       s.class_name,
+      subjects_entered: s.subjects.length,
+      subjects_total:   maxSubjects,
+      comments:         s.teacher_comment ?? undefined,
+      status:           deriveStatus(s),
+    }));
+  }, [rawData]);
+
+  const filtered = useMemo(() => {
+    let out = rows;
+    if (statusFilter) out = out.filter((r) => r.status === statusFilter);
+    if (search)       out = out.filter((r) => r.student_name.toLowerCase().includes(search.toLowerCase()));
+    return out;
+  }, [rows, statusFilter, search]);
+
+  const handleApprove = async () => {
+    if (!classFilter || !session) {
+      toast.error('Select a class and session first');
+      return;
+    }
+    setApproving(true);
     try {
-      await new Promise((r) => setTimeout(r, 1500));
-      toast.success('Report cards generated successfully');
+      await resultsApi.approve({ class_id: classFilter, academic_session: session, term });
+      toast.success('Report cards approved successfully');
     } catch {
-      toast.error('Failed to generate report cards');
+      toast.error('Failed to approve report cards');
     } finally {
-      setGenerating(false);
+      setApproving(false);
     }
   };
 
-  const columns: Column<ResultListItem>[] = [
+  const handleDownloadAll = () => {
+    if (!classFilter || !session) {
+      toast.error('Select a class and session first');
+      return;
+    }
+    generateBulk(classFilter, session, term);
+  };
+
+  const allApproved = filtered.length > 0 && filtered.every((r) => r.status === 'approved');
+
+  const columns: Column<ResultRow>[] = [
     {
-      key: 'student_name',
-      header: 'Student',
+      key:      'student_name',
+      header:   'Student',
       sortable: true,
-      render: (v) => (
+      render:   (v) => (
         <span className="text-sm font-medium text-[var(--color-text-primary)]">{String(v)}</span>
       ),
     },
     {
-      key: 'class_name',
+      key:    'class_name',
       header: 'Class',
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-secondary)]">{String(v)}</span>
       ),
     },
     {
-      key: 'subjects_entered',
+      key:    'subjects_entered',
       header: 'Scores Entered',
       render: (v, row) => (
-        <ScoreProgress entered={Number(v)} total={(row as ResultListItem).subjects_total} />
+        <ScoreProgress entered={Number(v)} total={(row as ResultRow).subjects_total} />
       ),
     },
     {
-      key: 'comments',
+      key:    'comments',
       header: 'Comments',
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-muted)] truncate max-w-[180px] block">
           {v ? String(v) : <span className="italic opacity-50">—</span>}
@@ -126,16 +183,45 @@ export default function AdminResultsPage() {
       ),
     },
     {
-      key: 'status',
+      key:    'status',
       header: 'Status',
       render: (v) => {
         const cfg = STATUS_CONFIG[v as ResultStatus];
         return cfg ? <Badge variant={cfg.variant} dot>{cfg.label}</Badge> : null;
       },
     },
+    {
+      key:    'student_id',
+      header: 'PDF',
+      render: (v, row) => {
+        const sid  = String(v);
+        const busy = isGeneratingId(sid);
+        return (
+          <button
+            onClick={() => generateSingle(sid, session, term)}
+            disabled={busy || !(row as ResultRow).subjects_entered}
+            title={
+              !(row as ResultRow).subjects_entered
+                ? 'No scores entered yet'
+                : 'Download report card PDF'
+            }
+            className={clsx(
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium cursor-pointer',
+              'border border-[var(--color-border)] text-[var(--color-navy)]',
+              'hover:bg-[var(--color-navy)] hover:text-white hover:border-[var(--color-navy)]',
+              'transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed',
+            )}
+          >
+            {busy
+              ? <Loader2 className="w-3 h-3 animate-spin" />
+              : <Download className="w-3 h-3" strokeWidth={2} />
+            }
+            {busy ? 'Generating…' : 'PDF'}
+          </button>
+        );
+      },
+    },
   ];
-
-  const allApproved = data && data.items.length > 0 && data.items.every((r) => r.status === 'approved');
 
   return (
     <div className="flex flex-col gap-5">
@@ -143,24 +229,49 @@ export default function AdminResultsPage() {
         title="Report Cards"
         description="Manage academic results and generate report cards"
         actions={
-          <button
-            onClick={handleGenerate}
-            disabled={generating || !allApproved}
-            title={!allApproved ? 'All results must be approved before generating' : undefined}
-            className={clsx(
-              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer',
-              'bg-[var(--color-navy)] text-white',
-              'hover:bg-[var(--color-navy-mid)] active:scale-[0.98]',
-              'transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
-            )}
-          >
-            {generating ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <FileCheck className="w-3.5 h-3.5" strokeWidth={1.5} />
-            )}
-            {generating ? 'Generating…' : 'Generate Report Cards'}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Bulk PDF download */}
+            <button
+              onClick={handleDownloadAll}
+              disabled={isBulkGenerating || !classFilter || !filtered.length}
+              title={!classFilter ? 'Select a class first' : 'Download all report cards as a single PDF'}
+              className={clsx(
+                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer',
+                'border border-[var(--color-navy)] text-[var(--color-navy)]',
+                'hover:bg-[var(--color-navy)] hover:text-white',
+                'transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+              )}
+            >
+              {isBulkGenerating
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <FileDown className="w-3.5 h-3.5" strokeWidth={1.5} />
+              }
+              {isBulkGenerating ? 'Generating…' : 'Download All PDFs'}
+            </button>
+
+            {/* Approve */}
+            <button
+              onClick={handleApprove}
+              disabled={approving || !allApproved || !classFilter}
+              title={
+                !classFilter     ? 'Select a class first'
+                : !allApproved   ? 'All results must be approved before generating'
+                : undefined
+              }
+              className={clsx(
+                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer',
+                'bg-[var(--color-navy)] text-white',
+                'hover:bg-[var(--color-navy-mid)] active:scale-[0.98]',
+                'transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+              )}
+            >
+              {approving
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <FileCheck className="w-3.5 h-3.5" strokeWidth={1.5} />
+              }
+              {approving ? 'Approving…' : 'Approve Report Cards'}
+            </button>
+          </div>
         }
       />
 
@@ -171,24 +282,12 @@ export default function AdminResultsPage() {
           value={session}
           onChange={(e) => setSession(e.target.value)}
           placeholder="e.g. 2024/2025"
-          className={clsx(
-            'text-sm rounded-lg px-3 py-1.5 w-32',
-            'bg-[var(--color-surface)] border border-[var(--color-border)]',
-            'text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)]',
-            'focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)]/30',
-            'transition-all duration-150',
-          )}
+          className={clsx(filterCls, 'w-32')}
         />
         <select
           value={term}
-          onChange={(e) => { setTerm(e.target.value); setPage(1); }}
-          className={clsx(
-            'text-sm rounded-lg px-3 py-1.5 cursor-pointer',
-            'bg-[var(--color-surface)] border border-[var(--color-border)]',
-            'text-[var(--color-text-primary)]',
-            'focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)]/30',
-            'transition-all duration-150',
-          )}
+          onChange={(e) => setTerm(e.target.value)}
+          className={clsx(filterCls, 'cursor-pointer')}
         >
           {TERMS.map((t) => (
             <option key={t.value} value={t.value}>{t.label}</option>
@@ -196,51 +295,42 @@ export default function AdminResultsPage() {
         </select>
         <select
           value={classFilter}
-          onChange={(e) => { setClassFilter(e.target.value); setPage(1); }}
-          className={clsx(
-            'text-sm rounded-lg px-3 py-1.5 cursor-pointer',
-            'bg-[var(--color-surface)] border border-[var(--color-border)]',
-            'text-[var(--color-text-primary)]',
-            'focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)]/30',
-            'transition-all duration-150',
-          )}
+          onChange={(e) => setClassFilter(e.target.value)}
+          className={clsx(filterCls, 'cursor-pointer')}
         >
-          <option value="">All Classes</option>
+          <option value="">Select a class…</option>
           {(classes ?? []).map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
         <select
           value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value as ResultStatus | ''); setPage(1); }}
-          className={clsx(
-            'text-sm rounded-lg px-3 py-1.5 cursor-pointer',
-            'bg-[var(--color-surface)] border border-[var(--color-border)]',
-            'text-[var(--color-text-primary)]',
-            'focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)]/30',
-            'transition-all duration-150',
-          )}
+          onChange={(e) => setStatusFilter(e.target.value as ResultStatus | '')}
+          className={clsx(filterCls, 'cursor-pointer')}
         >
           <option value="">All Status</option>
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
-          <option value="generated">Generated</option>
         </select>
       </div>
 
       <DataTable
         columns={columns}
-        data={(data?.items ?? []) as unknown as ResultListItem[]}
+        data={filtered as unknown as ResultRow[]}
         rowKey="id"
         isLoading={isLoading}
-        totalCount={data?.total ?? 0}
-        page={page}
-        perPage={20}
-        onPageChange={setPage}
-        onSearch={(q) => { setSearch(q); setPage(1); }}
+        totalCount={filtered.length}
+        page={1}
+        perPage={filtered.length || 20}
+        onPageChange={() => {}}
+        onSearch={(q) => setSearch(q)}
         searchPlaceholder="Search by student name…"
-        emptyTitle="No results found"
-        emptyDescription="Results will appear here once teachers enter scores."
+        emptyTitle={!classFilter ? 'Select a class to view results' : 'No results found'}
+        emptyDescription={
+          !classFilter
+            ? 'Choose a class from the filter above.'
+            : 'Results will appear here once teachers enter scores.'
+        }
       />
     </div>
   );

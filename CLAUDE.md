@@ -26,26 +26,44 @@
 - [ ] Session 7: Super Admin dashboard
 - [x] Session 8: Admin dashboard
 - [x] Session 9: Staff dashboard
-- [ ] Session 10: Remaining module pages (Phase 2)
-
+- [x] Session 10: Students router + schemas + service + tests
+- [x] Session 11: Classes router + Parents router + schemas + tests
+- [x] Session 12: Attendance router + schemas + tests
+- [x] Session 13: Results router + service + schemas + tests
+- [x] Session 14: Finance router + service + schemas + tests
+- [x] Session 15: Assignments router + schemas + tests
+- [x] Session 16: Communication router + schemas + tests + full backend audit
+- [x] Session 17: Frontend API integration (types, hooks, pages wired to real backend)
+- [x] Session 18: Admin + Staff pages wired to real API (hooks: useAttendance, useResults, useAssignments, useParents)
+- [x] Session 19: Cloudinary file upload integration (lib/cloudinary.ts, FileUpload component, students/new, assignments/new, settings logo)
+- [x] Session 20: PDF report card generator (@react-pdf/renderer, ReportCard component, useReportCardPDF hook, admin results + student detail pages)
+- [x] Session 21: Mobile responsive polish (sidebar slide-in, DataTable mobileHide columns + toolbar, staff communication two-panel mobile view, scores table overflow, target_audience enum fix + migration 003)
 
 Phase 2 — Remaining Backend Routers:
-- [ ] students router (CRUD, bulk upload, class assignment, transfer, promote)
-- [ ] parents router (CRUD, messaging)
-- [ ] classes router (CRUD, teacher assignment)
-- [ ] attendance router (mark, edit, reports)
-- [ ] results router (enter scores, approve, generate report cards)
-- [ ] finance router (record payment, Paystack webhook, debtors)
-- [ ] assignments router (CRUD, submissions, grading)
-- [ ] communication router (announcements, messages)
+- [x] students router (CRUD, bulk upload, class assignment, transfer, promote)
+- [x] parents router (CRUD, link to student)
+- [x] classes router (CRUD, teacher assignment)
+- [x] attendance router (mark, edit, reports)
+- [x] results router (enter scores, approve, generate report cards)
+- [x] finance router (record payment, Paystack webhook, debtors)
+- [x] assignments router (CRUD, submissions, grading)
+- [x] communication router (announcements, messages)
 
 Phase 2 — Remaining Frontend:
-- [ ] Connect all pages to real API (replace mock data with React Query hooks)
-- [ ] PDF report card generator
+- [x] Connect all pages to real API (replace mock data with React Query hooks)
+- [x] PDF report card generator
 - [ ] Paystack payment integration
-- [ ] Cloudinary file upload integration
+- [x] Cloudinary file upload integration
 - [ ] SMS notifications (Africa's Talking)
-- [ ] Mobile responsive polish
+- [x] Mobile responsive polish
+
+## Phase 3 — Remaining Features
+- [ ] Paystack payment integration (webhook, inline JS, payment confirmation flow)
+- [ ] SMS notifications via Africa's Talking (attendance alerts, fee reminders, exam notices)
+- [ ] Parent portal (separate login flow, view child's results, attendance, fee balance)
+- [ ] Advanced analytics dashboard (cohort trends, per-subject heatmaps, revenue forecasting)
+- [ ] Paystack subscription billing for the SaaS platform itself (per-school monthly plan)
+- [ ] Push notifications (web push / PWA) for real-time unread message alerts
 
 ## Phase 2 — Backend Routers Needed
 All frontend pages exist with mock data. These backend routers must be built before the app is fully functional:

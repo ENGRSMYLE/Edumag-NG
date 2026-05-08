@@ -21,6 +21,16 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.config import settings
 from app.routers import auth as auth_router
 from app.routers import users as users_router
+from app.routers import students as students_router
+from app.routers import classes as classes_router
+from app.routers import parents as parents_router
+from app.routers import attendance as attendance_router
+from app.routers import results as results_router
+from app.routers import finance as finance_router
+from app.routers import assignments as assignments_router
+from app.routers import communication as communication_router
+from app.routers import dashboard as dashboard_router
+from app.routers import settings as settings_router
 from app.utils.rate_limit import limiter  # single shared limiter instance
 
 logger = logging.getLogger(__name__)
@@ -47,19 +57,35 @@ app.add_middleware(SlowAPIMiddleware)
 
 _cors_origins = [o.strip() for o in settings.FRONTEND_URL.split(",") if o.strip()]
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins,
-    allow_credentials=True,  # required for httpOnly cookie flow
+# In development allow any localhost port so the Next.js dev server can run on
+# 3000, 3001, etc. without breaking the cookie/CORS flow.
+_cors_kwargs: dict = dict(
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+if settings.is_production:
+    _cors_kwargs["allow_origins"] = _cors_origins
+else:
+    _cors_kwargs["allow_origin_regex"] = r"http://localhost(:\d+)?"
+
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
 app.include_router(auth_router.router, prefix="/api")
 app.include_router(users_router.router, prefix="/api")
+app.include_router(students_router.router, prefix="/api")
+app.include_router(classes_router.router, prefix="/api")
+app.include_router(parents_router.router, prefix="/api")
+app.include_router(attendance_router.router, prefix="/api")
+app.include_router(results_router.router, prefix="/api")
+app.include_router(finance_router.router, prefix="/api")
+app.include_router(assignments_router.router, prefix="/api")
+app.include_router(communication_router.router, prefix="/api")
+app.include_router(dashboard_router.router, prefix="/api")
+app.include_router(settings_router.router, prefix="/api")
 
 # ---------------------------------------------------------------------------
 # Health check

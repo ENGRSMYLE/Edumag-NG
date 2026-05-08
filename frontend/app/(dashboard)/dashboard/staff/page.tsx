@@ -18,7 +18,7 @@ import { clsx } from 'clsx';
 import { SkeletonCard } from '@/components/shared/LoadingSkeleton';
 import { Badge } from '@/components/shared/Badge';
 import { useAuth } from '@/hooks/useAuth';
-import { studentsApi } from '@/lib/api';
+import { studentsApi, attendanceApi, assignmentsApi } from '@/lib/api';
 import { getInitials } from '@/lib/formatters';
 import type { StudentListItem } from '@/types/student';
 
@@ -78,7 +78,7 @@ function QuickStat({ icon: Icon, label, value, sub, variant, href, actionLabel }
 // ---------------------------------------------------------------------------
 
 function StudentPreviewRow({ student, index }: { student: StudentListItem; index: number }) {
-  const fullName = `${student.first_name} ${student.last_name}`;
+  const fullName = student.full_name || `${student.first_name ?? ''} ${student.last_name ?? ''}`.trim() || 'Unknown';
   const attendancePct = Math.floor(70 + Math.random() * 30); // mock until backend ready
   return (
     <div
@@ -109,7 +109,7 @@ function StudentPreviewRow({ student, index }: { student: StudentListItem; index
 // ---------------------------------------------------------------------------
 
 export default function StaffDashboardPage() {
-  const { user } = useAuth();
+  const { user, classId } = useAuth();
   const [greeting, setGreeting] = useState('Good morning');
   const [today, setToday] = useState('');
 
@@ -122,19 +122,37 @@ export default function StaffDashboardPage() {
   }, []);
 
   const { data: studentsData, isLoading } = useQuery({
-    queryKey: ['students', { per_page: 5, is_active: true }],
-    queryFn: () => studentsApi.list({ per_page: 5, is_active: true }).then((r) => r.data),
+    queryKey: ['my-class-students', { per_page: 5 }],
+    queryFn: () => studentsApi.myClass({ per_page: 5, is_active: true }).then((r) => r.data),
     staleTime: 60_000,
     retry: 1,
+    enabled: !!classId,
+  });
+
+  const { data: attendanceCheck } = useQuery({
+    queryKey: ['attendance', 'check', classId, today],
+    queryFn: () => attendanceApi.check(classId!, { date: today }).then((r) => r.data),
+    staleTime: 60_000,
+    retry: 1,
+    enabled: !!classId && !!today,
+  });
+
+  const { data: assignmentsData } = useQuery({
+    queryKey: ['assignments', { per_page: 50 }],
+    queryFn: () => assignmentsApi.list({ per_page: 50 }).then((r) => r.data),
+    staleTime: 60_000,
+    retry: 1,
+    enabled: !!classId,
   });
 
   const students = (studentsData?.items ?? []) as StudentListItem[];
   const totalStudents = studentsData?.total ?? 0;
 
-  // Mock data — replace with real API once backend is ready
-  const attendanceTaken = false;
-  const pendingScores: number = 3;
-  const pendingGrading: number = 2;
+  const attendanceTaken = attendanceCheck?.is_marked ?? false;
+  const pendingGrading: number = (assignmentsData?.items ?? []).filter(
+    (a) => a.submission_count > a.graded_count
+  ).length;
+  const pendingScores: number = 0; // shown as 0 until scores endpoint exposes pending count
 
   return (
     <div className="flex flex-col gap-6">
@@ -163,10 +181,12 @@ export default function StaffDashboardPage() {
                 My Class
               </p>
               <p className="text-base font-bold text-[var(--color-text-primary)] mt-0.5">
-                JSS 3A — Junior Secondary
+                {classId ? 'Class assigned' : 'No class assigned'}
               </p>
               <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                {totalStudents} enrolled students · Class Teacher confirmed
+                {classId
+                  ? `${totalStudents} enrolled students`
+                  : 'Contact admin to be assigned a class'}
               </p>
             </div>
             <Link

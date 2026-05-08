@@ -17,18 +17,17 @@ import { formatDate } from '@/lib/formatters';
 import type { PaymentListItem, PaymentStatus, PaymentType, PaymentMethod } from '@/types/dashboard';
 
 const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
-  tuition: 'Tuition',
-  levy:    'Levy',
-  uniform: 'Uniform',
-  books:   'Books',
-  other:   'Other',
+  school_fees:      'School Fees',
+  development_levy: 'Development Levy',
+  exam_fees:        'Exam Fees',
+  other:            'Other',
 };
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
-  cash:     'Cash',
-  transfer: 'Transfer',
-  card:     'Card',
-  pos:      'POS',
+  cash:          'Cash',
+  bank_transfer: 'Bank Transfer',
+  paystack:      'Paystack',
+  pos:           'POS',
 };
 
 const STATUS_VARIANT: Record<PaymentStatus, 'success' | 'warning' | 'danger'> = {
@@ -44,7 +43,7 @@ export default function AdminFinancePage() {
 
   const { data: statsData, isLoading: statsLoading } = useQuery({
     queryKey: ['finance', 'stats'],
-    queryFn: () => financeApi.stats().then((r) => r.data),
+    queryFn: () => financeApi.getSummary().then((r) => r.data),
     staleTime: 30_000,
     retry: 1,
   });
@@ -89,6 +88,7 @@ export default function AdminFinancePage() {
     {
       key: 'payment_method',
       header: 'Method',
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-secondary)]">
           {PAYMENT_METHOD_LABELS[v as PaymentMethod] ?? String(v)}
@@ -117,6 +117,7 @@ export default function AdminFinancePage() {
     {
       key: 'confirmed_by',
       header: 'Confirmed By',
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-muted)]">
           {v ? String(v) : <span className="text-[var(--color-text-muted)]/50">—</span>}
@@ -142,21 +143,19 @@ export default function AdminFinancePage() {
               title="Total Collected This Term"
               value={statsData ? `₦${(statsData.total_collected_kobo / 100).toLocaleString()}` : '₦0'}
               icon={Banknote}
-              change={statsData?.collected_change_pct}
-              changeLabel="vs last term"
               variant="success"
               delay={0}
             />
             <StatCard
               title="Outstanding Fees"
-              value={statsData ? `₦${(statsData.outstanding_kobo / 100).toLocaleString()}` : '₦0'}
+              value={statsData ? `₦${(statsData.total_outstanding_kobo / 100).toLocaleString()}` : '₦0'}
               icon={AlertCircle}
               variant="danger"
               delay={1}
             />
             <StatCard
-              title="Fully Paid Students"
-              value={statsData?.fully_paid_count ?? 0}
+              title="Confirmed Payments"
+              value={statsData?.confirmed_payments_count ?? 0}
               icon={CheckCircle2}
               variant="gold"
               delay={2}

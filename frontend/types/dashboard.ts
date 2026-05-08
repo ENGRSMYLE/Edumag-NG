@@ -45,14 +45,15 @@ export interface DashboardOverview {
 
 export interface FinanceStats {
   total_collected_kobo: number;
-  outstanding_kobo: number;
-  fully_paid_count: number;
+  total_outstanding_kobo: number;
+  confirmed_payments_count: number;
+  pending_payments_count: number;
   debtors_count: number;
-  collected_change_pct: number;
+  collection_rate: number;
 }
 
-export type PaymentType = 'tuition' | 'levy' | 'uniform' | 'books' | 'other';
-export type PaymentMethod = 'cash' | 'transfer' | 'card' | 'pos';
+export type PaymentType = 'school_fees' | 'development_levy' | 'exam_fees' | 'other';
+export type PaymentMethod = 'cash' | 'bank_transfer' | 'paystack' | 'pos';
 export type PaymentStatus = 'pending' | 'confirmed' | 'rejected';
 
 export interface PaymentListItem {

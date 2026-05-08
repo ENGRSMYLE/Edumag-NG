@@ -47,6 +47,8 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "view_class_list",
         "view_own_class_attendance",
         "view_all_attendance",
+        "view_own_class_reports",
+        "approve_results",
         "generate_report_cards",
         "view_all_reports",
         "record_payment",
@@ -89,6 +91,30 @@ def require_permission(permission: str) -> Callable:
             )
         role_value = current_user.current_role.value  # type: ignore[attr-defined]
         if not _has_permission(role_value, permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return current_user
+
+    return dependency
+
+
+def require_any_permission(*permissions: str) -> Callable:
+    """Allow access if the user has ANY one of the listed permissions."""
+    async def dependency(
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        if current_user.is_first_login:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "PASSWORD_CHANGE_REQUIRED",
+                    "message": "Please set your password before performing this action",
+                },
+            )
+        role_value = current_user.current_role.value  # type: ignore[attr-defined]
+        if not any(_has_permission(role_value, perm) for perm in permissions):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions",

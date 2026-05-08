@@ -104,6 +104,7 @@ class UserInToken(BaseModel):
     membership_id: uuid.UUID
     is_first_login: bool
     profile_photo_url: Optional[str] = None
+    current_class_id: Optional[uuid.UUID] = None
 
     model_config = {"from_attributes": True}
 

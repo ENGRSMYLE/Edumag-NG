@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { studentsApi } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import { getInitials } from '@/lib/formatters';
 import type { StudentListItem } from '@/types/student';
 
@@ -23,14 +24,16 @@ interface StudentScore {
 }
 
 export default function ResultsPage() {
+  const { classId } = useAuth();
   const [selectedSubject, setSelectedSubject] = useState(SUBJECTS[0]);
   const [scores, setScores] = useState<Record<string, StudentScore>>({});
 
   const { data, isLoading } = useQuery({
-    queryKey: ['students', { per_page: 100, is_active: true }],
-    queryFn: () => studentsApi.list({ per_page: 100, is_active: true }).then((r) => r.data),
+    queryKey: ['my-class-students', { per_page: 100 }],
+    queryFn: () => studentsApi.myClass({ per_page: 100, is_active: true }).then((r) => r.data),
     staleTime: 60_000,
     retry: 1,
+    enabled: !!classId,
   });
 
   const students = (data?.items ?? []) as StudentListItem[];
@@ -151,7 +154,7 @@ export default function ResultsPage() {
           ) : (
             <div className="divide-y divide-[var(--color-border)]">
               {students.map((student) => {
-                const fullName = `${student.first_name} ${student.last_name}`;
+                const fullName = student.full_name || `${student.first_name ?? ''} ${student.last_name ?? ''}`.trim() || 'Unknown';
                 const total = getTotal(student.id);
                 const grade = getGrade(total);
                 return (

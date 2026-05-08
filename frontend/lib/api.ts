@@ -34,8 +34,23 @@ import type {
   AuditLogParams,
 } from '@/types/dashboard';
 import type { ParentListItem, CreateParentRequest, ParentListParams } from '@/types/parent';
-import type { AttendanceReportItem, AttendanceReportParams } from '@/types/attendance';
-import type { Announcement, CreateAnnouncementRequest } from '@/types/communication';
+import type {
+  SchoolAttendanceSummary,
+  ClassAttendanceSummary,
+  AttendanceRecord,
+  MarkAttendanceRequest,
+  MarkAttendanceResponse,
+  CheckAttendanceResponse,
+  AttendanceReportParams,
+} from '@/types/attendance';
+import type {
+  Announcement,
+  CreateAnnouncementRequest,
+  MessageResponse,
+  SendMessageRequest,
+  InboxResponse,
+  UnreadCountResponse,
+} from '@/types/communication';
 import type {
   AssignmentListItem,
   Assignment,
@@ -247,6 +262,9 @@ export const studentsApi = {
   list: (params?: StudentListParams) =>
     api.get<PaginatedResponse<StudentListItem>>('/students/', { params }),
 
+  myClass: (params?: { page?: number; per_page?: number; search?: string; is_active?: boolean }) =>
+    api.get<PaginatedResponse<StudentListItem>>('/students/my-class', { params }),
+
   get: (id: string) =>
     api.get<Student>(`/students/${id}`),
 
@@ -283,38 +301,121 @@ export const parentsApi = {
 // ---------------------------------------------------------------------------
 
 export const attendanceApi = {
-  report: (params?: AttendanceReportParams) =>
-    api.get<AttendanceReportItem[]>('/attendance/report', { params }),
+  // School-wide report (admin) — GET /attendance/school
+  school: (params?: AttendanceReportParams) =>
+    api.get<SchoolAttendanceSummary>('/attendance/school', { params }),
 
-  submit: (data: { date: string; class_id: string; records: { student_id: string; status: string }[] }) =>
-    api.post('/attendance/submit', data),
+  // Mark attendance for a class — POST /attendance/mark
+  mark: (data: MarkAttendanceRequest) =>
+    api.post<MarkAttendanceResponse>('/attendance/mark', data),
 
-  history: (params?: { class_id?: string; start_date?: string; end_date?: string; page?: number; per_page?: number }) =>
-    api.get<import('@/types/common').PaginatedResponse<{ id: string; date: string; present: number; absent: number; late: number; excused: number; total: number }>>('/attendance/history', { params }),
+  // Check if attendance already marked for a class+date — GET /attendance/check/{class_id}
+  check: (classId: string, params?: { date?: string }) =>
+    api.get<CheckAttendanceResponse>(`/attendance/check/${classId}`, { params }),
 
-  checkDate: (params: { date: string; class_id: string }) =>
-    api.get<{ submitted: boolean; summary?: { present: number; absent: number; late: number; excused: number } }>('/attendance/check', { params }),
+  // Per-student records for a class — GET /attendance/class/{class_id}
+  classRecords: (classId: string, params?: { date?: string; start_date?: string; end_date?: string }) =>
+    api.get<AttendanceRecord[]>(`/attendance/class/${classId}`, { params }),
+
+  // Aggregate summary for a class — GET /attendance/class/{class_id}/summary
+  classSummary: (classId: string, params?: { start_date?: string; end_date?: string }) =>
+    api.get<ClassAttendanceSummary>(`/attendance/class/${classId}/summary`, { params }),
+
+  // Update a single attendance record — PATCH /attendance/{attendance_id}
+  update: (attendanceId: string, data: { status?: string; note?: string }) =>
+    api.patch<AttendanceRecord>(`/attendance/${attendanceId}`, data),
 };
 
 // ---------------------------------------------------------------------------
-// Announcements API
+// Communication API (announcements + messages)
 // ---------------------------------------------------------------------------
 
-export const announcementsApi = {
-  list: (params?: { page?: number; per_page?: number }) =>
-    api.get<PaginatedResponse<Announcement>>('/announcements/', { params }),
+export const communicationApi = {
+  listAnnouncements: (params?: { page?: number; per_page?: number; target_audience?: string }) =>
+    api.get<PaginatedResponse<Announcement>>('/communication/announcements', { params }),
 
-  create: (data: CreateAnnouncementRequest) =>
-    api.post<Announcement>('/announcements/', data),
+  createAnnouncement: (data: CreateAnnouncementRequest) =>
+    api.post<Announcement>('/communication/announcements', data),
+
+  getInbox: (params?: { page?: number; per_page?: number; is_read?: boolean }) =>
+    api.get<InboxResponse>('/communication/messages/inbox', { params }),
+
+  getSent: (params?: { page?: number; per_page?: number }) =>
+    api.get<PaginatedResponse<MessageResponse>>('/communication/messages/sent', { params }),
+
+  sendMessage: (data: SendMessageRequest) =>
+    api.post<MessageResponse>('/communication/messages', data),
+
+  markRead: (messageId: string) =>
+    api.patch<MessageResponse>(`/communication/messages/${messageId}/read`),
+
+  getUnreadCount: () =>
+    api.get<UnreadCountResponse>('/communication/messages/unread-count'),
+
+  getRecipients: () =>
+    api.get<{ id: string; name: string; role: string }[]>('/communication/messages/recipients'),
 };
 
 // ---------------------------------------------------------------------------
 // Results API
 // ---------------------------------------------------------------------------
 
+export interface ResultResponse {
+  id: string;
+  student_id: string;
+  student_name: string;
+  subject: string;
+  academic_session: string;
+  term: string;
+  ca_score?: number;
+  exam_score?: number;
+  total_score?: number;
+  grade?: string;
+  remark?: string;
+  teacher_comment?: string;
+  is_approved: boolean;
+  entered_by_name: string;
+}
+
+export interface ResultSummary {
+  student_id: string;
+  student_name: string;
+  admission_number: string;
+  class_name: string;
+  academic_session: string;
+  term: string;
+  subjects: ResultResponse[];
+  total_score: number;
+  average: number;
+  position?: number;
+  teacher_comment?: string;
+  principal_comment?: string;
+}
+
 export const resultsApi = {
-  report: (params?: ResultListParams) =>
-    api.get<PaginatedResponse<ResultListItem>>('/results/report', { params }),
+  // Per-subject records for a class — GET /results/class/{class_id}
+  classResults: (classId: string, params: { academic_session: string; term: string; subject?: string }) =>
+    api.get<ResultResponse[]>(`/results/class/${classId}`, { params }),
+
+  // Report cards (per-student summaries) — GET /results/class/{class_id}/report-cards
+  classReportCards: (classId: string, params: { academic_session: string; term: string }) =>
+    api.get<ResultSummary[]>(`/results/class/${classId}/report-cards`, { params }),
+
+  // Single student result — GET /results/student/{student_id}
+  studentResult: (studentId: string, params: { academic_session: string; term: string }) =>
+    api.get<ResultSummary>(`/results/student/${studentId}`, { params }),
+
+  // Bulk score entry (upsert) — POST /results/scores
+  enterScores: (data: { class_id: string; academic_session: string; term: string; subject: string; entries: { student_id: string; ca_score: number; exam_score: number }[] }) =>
+    api.post<{ updated_count: number; subject: string }>('/results/scores', data),
+
+  // Approve all results for a class/term — POST /results/approve
+  approve: (data: { class_id: string; academic_session: string; term: string }) =>
+    api.post<{ approved_count: number }>('/results/approve', data),
+
+  // Add teacher comment — PATCH /results/{result_id}/comment
+  addComment: (resultId: string, data: { teacher_comment: string }) =>
+    api.patch<ResultResponse>(`/results/${resultId}/comment`, data),
 };
 
 // ---------------------------------------------------------------------------
@@ -322,10 +423,10 @@ export const resultsApi = {
 // ---------------------------------------------------------------------------
 
 export const classesApi = {
-  list: () =>
-    api.get<ClassListItem[]>('/classes/'),
+  list: (params?: { is_active?: boolean; per_page?: number; page?: number; academic_session?: string; term?: string; search?: string }) =>
+    api.get<PaginatedResponse<ClassListItem>>('/classes/', { params }),
 
-  create: (data: { name: string; level: string; arm?: string; teacher_id?: string; capacity?: number; session?: string; term?: string }) =>
+  create: (data: { name: string; level: string; arm?: string; teacher_id?: string; capacity?: number; academic_session: string; term: string }) =>
     api.post<ClassListItem>('/classes/', data),
 
   update: (id: string, data: Partial<{ name: string; level: string; arm?: string; teacher_id?: string; capacity?: number }>) =>
@@ -337,8 +438,8 @@ export const classesApi = {
 // ---------------------------------------------------------------------------
 
 export const financeApi = {
-  stats: () =>
-    api.get<FinanceStats>('/finance/stats'),
+  getSummary: (params?: { academic_session?: string; term?: string }) =>
+    api.get<FinanceStats>('/finance/summary', { params }),
 
   payments: (params?: PaymentListParams) =>
     api.get<PaginatedResponse<PaymentListItem>>('/finance/payments', { params }),
@@ -348,6 +449,9 @@ export const financeApi = {
 
   recordPayment: (data: { student_id: string; amount_kobo: number; payment_type: string; payment_method: string; session?: string; term?: string; notes?: string }) =>
     api.post<PaymentListItem>('/finance/payments', data),
+
+  confirmPayment: (id: string, data: { note?: string }) =>
+    api.post<PaymentListItem>(`/finance/payments/${id}/confirm`, data),
 };
 
 // ---------------------------------------------------------------------------
@@ -405,20 +509,8 @@ export const assignmentsApi = {
   submissions: (assignmentId: string) =>
     api.get<AssignmentSubmission[]>(`/assignments/${assignmentId}/submissions`),
 
-  grade: (submissionId: string, data: GradeSubmissionRequest) =>
-    api.patch(`/assignments/submissions/${submissionId}/grade`, data),
-};
-
-// ---------------------------------------------------------------------------
-// Messages API (staff ↔ admin)
-// ---------------------------------------------------------------------------
-
-export const messagesApi = {
-  list: () =>
-    api.get<import('@/types/common').PaginatedResponse<{ id: string; subject: string; body: string; sent_at: string; is_read: boolean; sender_name: string; recipient_name: string }>>('/messages/'),
-
-  send: (data: { subject: string; body: string }) =>
-    api.post('/messages/', data),
+  grade: (assignmentId: string, submissionId: string, data: GradeSubmissionRequest) =>
+    api.patch(`/assignments/${assignmentId}/submissions/${submissionId}/grade`, data),
 };
 
 export default api;

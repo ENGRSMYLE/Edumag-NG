@@ -92,6 +92,7 @@ export default function AdminParentsPage() {
     {
       key: 'email',
       header: 'Email',
+      mobileHide: true,
       render: (v) => (
         v ? (
           <div className="flex items-center gap-1.5">

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDays,
   Check,
@@ -17,9 +17,11 @@ import toast from 'react-hot-toast';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Badge } from '@/components/shared/Badge';
-import { studentsApi } from '@/lib/api';
+import { studentsApi, attendanceApi } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import { getInitials } from '@/lib/formatters';
 import type { StudentListItem } from '@/types/student';
+import type { AttendanceRecord } from '@/types/attendance';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,17 +77,6 @@ const STATUS_CONFIG: Record<
 
 const STATUSES: AttendanceStatus[] = ['present', 'absent', 'late', 'excused'];
 
-// Mock history records
-const MOCK_HISTORY = [
-  { date: '2026-04-25', present: 28, absent: 2, late: 1, excused: 0, total: 31 },
-  { date: '2026-04-24', present: 30, absent: 1, late: 0, excused: 0, total: 31 },
-  { date: '2026-04-23', present: 27, absent: 3, late: 1, excused: 0, total: 31 },
-  { date: '2026-04-22', present: 29, absent: 1, late: 1, excused: 1, total: 32 },
-  { date: '2026-04-17', present: 31, absent: 0, late: 1, excused: 0, total: 32 },
-  { date: '2026-04-16', present: 28, absent: 4, late: 0, excused: 0, total: 32 },
-  { date: '2026-04-15', present: 30, absent: 2, late: 0, excused: 0, total: 32 },
-];
-
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -121,7 +112,8 @@ function StatusButton({
 // Take Attendance tab
 // ---------------------------------------------------------------------------
 
-function TakeAttendanceTab() {
+function TakeAttendanceTab({ classId }: { classId: string }) {
+  const queryClient = useQueryClient();
   const [today, setToday] = useState('');
   const [date, setDate] = useState('');
   const [attendance, setAttendance] = useState<Record<string, AttendanceStatus>>({});
@@ -133,14 +125,37 @@ function TakeAttendanceTab() {
     setDate(d);
   }, []);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['students', { per_page: 100, is_active: true }],
-    queryFn: () => studentsApi.list({ per_page: 100, is_active: true }).then((r) => r.data),
+  const { data: studentsData, isLoading } = useQuery({
+    queryKey: ['my-class-students', { per_page: 100 }],
+    queryFn: () => studentsApi.myClass({ per_page: 100, is_active: true }).then((r) => r.data),
     staleTime: 60_000,
     retry: 1,
   });
 
-  const students = (data?.items ?? []) as StudentListItem[];
+  const { data: checkData } = useQuery({
+    queryKey: ['attendance', 'check', classId, date],
+    queryFn: () => attendanceApi.check(classId, { date }).then((r) => r.data),
+    staleTime: 30_000,
+    enabled: !!date,
+  });
+
+  const { mutate: markAttendance, isPending: isSubmitting } = useMutation({
+    mutationFn: (data: Parameters<typeof attendanceApi.mark>[0]) =>
+      attendanceApi.mark(data).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'check', classId] });
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'class', classId] });
+      toast.success('Attendance saved successfully');
+      setSubmitted(true);
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.detail ?? 'Failed to save attendance';
+      toast.error(typeof msg === 'string' ? msg : 'Failed to save attendance');
+    },
+  });
+
+  const students = (studentsData?.items ?? []) as StudentListItem[];
+  const alreadyMarked = checkData?.is_marked ?? false;
 
   const mark = (id: string, status: AttendanceStatus) =>
     setAttendance((prev) => ({ ...prev, [id]: status }));
@@ -157,15 +172,18 @@ function TakeAttendanceTab() {
       toast.error(`${unmarked.length} student(s) not marked`);
       return;
     }
-    toast.success('Attendance saved successfully');
-    setSubmitted(true);
+    markAttendance({
+      class_id: classId,
+      date,
+      records: students.map((s) => ({ student_id: s.id, status: attendance[s.id] })),
+    });
   };
 
   const presentCount = Object.values(attendance).filter((s) => s === 'present').length;
   const absentCount = Object.values(attendance).filter((s) => s === 'absent').length;
   const markedCount = Object.values(attendance).length;
 
-  if (submitted) {
+  if (submitted || alreadyMarked) {
     return (
       <div className="card-shell">
         <div className="card-core p-12 flex flex-col items-center gap-4 text-center">
@@ -174,23 +192,28 @@ function TakeAttendanceTab() {
           </div>
           <div>
             <h3 className="text-base font-semibold text-[var(--color-text-primary)]">
-              Attendance Saved
+              Attendance {submitted ? 'Saved' : 'Already Taken'}
             </h3>
             <p className="text-sm text-[var(--color-text-muted)] mt-1">
-              {presentCount} present · {absentCount} absent · {students.length} total for{' '}
+              {submitted
+                ? `${presentCount} present · ${absentCount} absent · ${students.length} total for `
+                : `Attendance for `}
               <span className="font-medium">{date}</span>
+              {checkData?.marked_by && ` · Marked by ${checkData.marked_by}`}
             </p>
           </div>
-          <button
-            onClick={() => setSubmitted(false)}
-            className={clsx(
-              'flex items-center gap-1.5 text-sm font-medium cursor-pointer',
-              'text-[var(--color-navy)] hover:underline',
-            )}
-          >
-            <PencilLine className="w-3.5 h-3.5" strokeWidth={1.5} />
-            Edit attendance
-          </button>
+          {submitted && (
+            <button
+              onClick={() => setSubmitted(false)}
+              className={clsx(
+                'flex items-center gap-1.5 text-sm font-medium cursor-pointer',
+                'text-[var(--color-navy)] hover:underline',
+              )}
+            >
+              <PencilLine className="w-3.5 h-3.5" strokeWidth={1.5} />
+              Edit attendance
+            </button>
+          )}
         </div>
       </div>
     );
@@ -274,7 +297,7 @@ function TakeAttendanceTab() {
           ) : (
             <div className="divide-y divide-[var(--color-border)]">
               {students.map((student) => {
-                const fullName = `${student.first_name} ${student.last_name}`;
+                const fullName = student.full_name || `${student.first_name ?? ''} ${student.last_name ?? ''}`.trim() || 'Unknown';
                 const current = attendance[student.id];
                 return (
                   <div
@@ -323,15 +346,16 @@ function TakeAttendanceTab() {
         <div className="flex justify-end">
           <button
             onClick={handleSubmit}
+            disabled={isSubmitting}
             className={clsx(
               'flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer',
               'bg-[var(--color-navy)] text-white',
               'hover:bg-[var(--color-navy-mid)] active:scale-[0.98]',
-              'transition-all duration-200',
+              'transition-all duration-200 disabled:opacity-60',
             )}
           >
             <Check className="w-4 h-4" strokeWidth={2} />
-            Save Attendance
+            {isSubmitting ? 'Saving…' : 'Save Attendance'}
           </button>
         </div>
       )}
@@ -343,15 +367,29 @@ function TakeAttendanceTab() {
 // History tab
 // ---------------------------------------------------------------------------
 
-function HistoryTab() {
+function HistoryTab({ classId }: { classId: string }) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const filtered = MOCK_HISTORY.filter((r) => {
-    if (startDate && r.date < startDate) return false;
-    if (endDate && r.date > endDate) return false;
-    return true;
+  const { data: records, isLoading } = useQuery({
+    queryKey: ['attendance', 'class', classId, { start_date: startDate || undefined, end_date: endDate || undefined }],
+    queryFn: () => attendanceApi.classRecords(classId, {
+      start_date: startDate || undefined,
+      end_date: endDate || undefined,
+    }).then((r) => r.data),
+    staleTime: 30_000,
+    retry: 1,
   });
+
+  // Group records by date for summary display
+  const byDate = (records ?? []).reduce<Record<string, AttendanceRecord[]>>((acc, rec) => {
+    const d = rec.date;
+    if (!acc[d]) acc[d] = [];
+    acc[d].push(rec);
+    return acc;
+  }, {});
+
+  const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
 
   return (
     <div className="flex flex-col gap-4">
@@ -410,17 +448,33 @@ function HistoryTab() {
             <span className="text-xs font-semibold text-white/80 uppercase tracking-wide text-center">Rate</span>
           </div>
 
-          {filtered.length === 0 ? (
+          {isLoading ? (
+            <div className="divide-y divide-[var(--color-border)]">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="grid grid-cols-[1fr_80px_80px_80px_80px_80px] gap-2 px-5 py-3">
+                  {Array.from({ length: 6 }).map((_, j) => (
+                    <div key={j} className="skeleton h-4 w-full rounded" />
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : dates.length === 0 ? (
             <div className="p-10 text-center">
               <p className="text-sm text-[var(--color-text-muted)]">No attendance records found.</p>
             </div>
           ) : (
             <div className="divide-y divide-[var(--color-border)]">
-              {filtered.map((record, i) => {
-                const pct = Math.round((record.present / record.total) * 100);
+              {dates.map((date, i) => {
+                const recs = byDate[date];
+                const present = recs.filter((r) => r.status === 'present').length;
+                const absent = recs.filter((r) => r.status === 'absent').length;
+                const late = recs.filter((r) => r.status === 'late').length;
+                const excused = recs.filter((r) => r.status === 'excused').length;
+                const total = recs.length;
+                const pct = total > 0 ? Math.round((present / total) * 100) : 0;
                 return (
                   <div
-                    key={record.date}
+                    key={date}
                     className={clsx(
                       'grid grid-cols-[1fr_80px_80px_80px_80px_80px] gap-2 px-5 py-3 items-center',
                       'transition-colors duration-150 hover:bg-[var(--color-surface)]',
@@ -428,21 +482,19 @@ function HistoryTab() {
                     )}
                   >
                     <span className="text-sm font-medium text-[var(--color-text-primary)]">
-                      {new Date(record.date + 'T00:00:00').toLocaleDateString('en-NG', {
+                      {new Date(date + 'T00:00:00').toLocaleDateString('en-NG', {
                         weekday: 'short',
                         day: 'numeric',
                         month: 'short',
                         year: 'numeric',
                       })}
                     </span>
-                    <span className="text-sm font-medium text-emerald-600 text-center tabular-nums">{record.present}</span>
-                    <span className="text-sm font-medium text-red-600 text-center tabular-nums">{record.absent}</span>
-                    <span className="text-sm font-medium text-amber-600 text-center tabular-nums">{record.late}</span>
-                    <span className="text-sm font-medium text-blue-600 text-center tabular-nums">{record.excused}</span>
+                    <span className="text-sm font-medium text-emerald-600 text-center tabular-nums">{present}</span>
+                    <span className="text-sm font-medium text-red-600 text-center tabular-nums">{absent}</span>
+                    <span className="text-sm font-medium text-amber-600 text-center tabular-nums">{late}</span>
+                    <span className="text-sm font-medium text-blue-600 text-center tabular-nums">{excused}</span>
                     <div className="flex justify-center">
-                      <Badge
-                        variant={pct >= 90 ? 'success' : pct >= 75 ? 'warning' : 'danger'}
-                      >
+                      <Badge variant={pct >= 90 ? 'success' : pct >= 75 ? 'warning' : 'danger'}>
                         {pct}%
                       </Badge>
                     </div>
@@ -462,6 +514,7 @@ function HistoryTab() {
 // ---------------------------------------------------------------------------
 
 export default function AttendancePage() {
+  const { classId } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>('take');
 
   const tabs: { key: ActiveTab; label: string; icon: React.ComponentType<{ className?: string; strokeWidth?: number }> }[] = [
@@ -497,7 +550,17 @@ export default function AttendancePage() {
         ))}
       </div>
 
-      {activeTab === 'take' ? <TakeAttendanceTab /> : <HistoryTab />}
+      {!classId ? (
+        <div className="card-shell">
+          <div className="card-core p-10 text-center">
+            <p className="text-sm text-[var(--color-text-muted)]">No class assigned. Contact admin.</p>
+          </div>
+        </div>
+      ) : activeTab === 'take' ? (
+        <TakeAttendanceTab classId={classId} />
+      ) : (
+        <HistoryTab classId={classId} />
+      )}
     </div>
   );
 }

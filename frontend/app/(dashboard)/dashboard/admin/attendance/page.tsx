@@ -48,19 +48,19 @@ export default function AdminAttendancePage() {
 
   const { data: classes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.list().then((r) => r.data),
+    queryFn: () => classesApi.list().then((r) => r.data.items),
     staleTime: 120_000,
   });
 
   const { data: report, isLoading } = useQuery({
-    queryKey: ['attendance', 'report', { date, class_id: classFilter || undefined }],
-    queryFn: () => attendanceApi.report({ date, class_id: classFilter || undefined }).then((r) => r.data),
+    queryKey: ['attendance', 'school', { date, class_id: classFilter || undefined }],
+    queryFn: () => attendanceApi.school({ date, class_id: classFilter || undefined }).then((r) => r.data),
     staleTime: 30_000,
     retry: 1,
     enabled: !!date,
   });
 
-  const rows = report ?? [];
+  const rows = report?.by_class ?? [];
 
   const totalStudents = rows.reduce((s, r) => s + r.total_students, 0);
   const totalPresent = rows.reduce((s, r) => s + r.present, 0);
@@ -164,8 +164,8 @@ export default function AdminAttendancePage() {
                     <th className="px-5 py-3 text-right text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">Total</th>
                     <th className="px-5 py-3 text-right text-xs font-semibold text-emerald-600 uppercase tracking-wide">Present</th>
                     <th className="px-5 py-3 text-right text-xs font-semibold text-red-500 uppercase tracking-wide">Absent</th>
-                    <th className="px-5 py-3 text-right text-xs font-semibold text-amber-500 uppercase tracking-wide">Late</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wide min-w-[180px]">Attendance %</th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-amber-500 uppercase tracking-wide hidden sm:table-cell">Late</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wide min-w-[120px] sm:min-w-[180px]">Attendance %</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
@@ -183,11 +183,11 @@ export default function AdminAttendancePage() {
                       <td className="px-5 py-3.5 text-sm font-mono text-right text-red-500 tabular-nums">
                         {row.absent}
                       </td>
-                      <td className="px-5 py-3.5 text-sm font-mono text-right text-amber-500 tabular-nums">
+                      <td className="px-5 py-3.5 text-sm font-mono text-right text-amber-500 tabular-nums hidden sm:table-cell">
                         {row.late}
                       </td>
                       <td className="px-5 py-3.5 min-w-[180px]">
-                        <AttendancePctBar pct={row.attendance_pct} />
+                        <AttendancePctBar pct={row.attendance_rate} />
                       </td>
                     </tr>
                   ))}

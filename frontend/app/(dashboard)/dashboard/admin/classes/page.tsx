@@ -15,12 +15,16 @@ import { Badge } from '@/components/shared/Badge';
 import { classesApi, usersApi } from '@/lib/api';
 import type { ClassListItem } from '@/types/academic';
 
+const TERMS = ['first', 'second', 'third'] as const;
+
 const schema = z.object({
   name: z.string().min(1, 'Class name is required'),
   level: z.string().min(1, 'Level is required'),
   arm: z.string().optional(),
   teacher_id: z.string().optional(),
   capacity: z.coerce.number().int().min(1).max(200).optional(),
+  academic_session: z.string().min(1, 'Academic session is required'),
+  term: z.enum(TERMS, { required_error: 'Term is required' }),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -61,14 +65,26 @@ function CreateClassModal({ isOpen, onClose, editClass }: CreateClassModalProps)
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: editClass
-      ? { name: editClass.name, level: editClass.level }
+      ? {
+          name: editClass.name,
+          level: editClass.level,
+          arm: editClass.arm ?? undefined,
+          academic_session: editClass.academic_session,
+          term: editClass.term as (typeof TERMS)[number],
+        }
       : {},
   });
 
   useEffect(() => {
     if (!isOpen) reset();
     else if (editClass) {
-      reset({ name: editClass.name, level: editClass.level });
+      reset({
+        name: editClass.name,
+        level: editClass.level,
+        arm: editClass.arm ?? undefined,
+        academic_session: editClass.academic_session,
+        term: editClass.term as (typeof TERMS)[number],
+      });
     } else {
       reset({});
     }
@@ -172,12 +188,38 @@ function CreateClassModal({ isOpen, onClose, editClass }: CreateClassModalProps)
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-[var(--color-text-primary)]">
+                    Academic Session <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    {...register('academic_session')}
+                    className={inputCls(!!errors.academic_session)}
+                    placeholder="2024/2025"
+                  />
+                  {errors.academic_session && <p className="text-[11px] text-red-500">{errors.academic_session.message}</p>}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-[var(--color-text-primary)]">
+                    Term <span className="text-red-500">*</span>
+                  </label>
+                  <select {...register('term')} className={clsx(inputCls(!!errors.term), 'cursor-pointer')}>
+                    <option value="">Select term</option>
+                    {TERMS.map((t) => (
+                      <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)} Term</option>
+                    ))}
+                  </select>
+                  {errors.term && <p className="text-[11px] text-red-500">{errors.term.message}</p>}
+                </div>
+              </div>
+
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-[var(--color-text-primary)]">Assign Class Teacher</label>
                 <select {...register('teacher_id')} className={clsx(inputCls(), 'cursor-pointer')}>
                   <option value="">Select teacher (optional)</option>
                   {((staff as any)?.items ?? []).map((t: any) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                    <option key={t.user_id} value={t.user_id}>{t.name}</option>
                   ))}
                 </select>
               </div>
@@ -226,7 +268,7 @@ export default function AdminClassesPage() {
 
   const { data: classes, isLoading } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.list().then((r) => r.data),
+    queryFn: () => classesApi.list().then((r) => r.data.items),
     staleTime: 60_000,
     retry: 1,
   });

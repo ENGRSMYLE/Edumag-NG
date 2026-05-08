@@ -89,6 +89,7 @@ export default function StaffPage() {
     {
       key: 'email',
       header: 'Email',
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-secondary)]">{String(v)}</span>
       ),
@@ -115,6 +116,7 @@ export default function StaffPage() {
       key: 'created_at',
       header: 'Joined',
       sortable: true,
+      mobileHide: true,
       render: (v) => (
         <span className="text-sm text-[var(--color-text-muted)] font-mono tabular-nums">
           {formatDate(String(v))}

@@ -8,10 +8,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { X, UserPlus, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 
-import { usersApi } from '@/lib/api';
+import { usersApi, classesApi } from '@/lib/api';
 import type { InviteUserRequest } from '@/types/staff';
 
 const schema = z
@@ -68,6 +68,14 @@ export function InviteUserModal({
   });
 
   const role = watch('role');
+
+  const { data: classesData } = useQuery({
+    queryKey: ['classes', { is_active: true }],
+    queryFn: () => classesApi.list({ is_active: true, per_page: 100 }).then((r) => r.data),
+    staleTime: 120_000,
+    enabled: isOpen && role === 'teacher',
+  });
+  const classes = (classesData as any)?.items ?? [];
 
   const { mutate: invite, isPending } = useMutation({
     mutationFn: (data: InviteUserRequest) =>
@@ -237,11 +245,22 @@ export function InviteUserModal({
                       (required)
                     </span>
                   </label>
-                  <input
+                  <select
                     {...register('class_id')}
-                    placeholder="Class ID"
-                    className={inputCx(!!errors.class_id)}
-                  />
+                    className={clsx(inputCx(!!errors.class_id), 'cursor-pointer')}
+                  >
+                    <option value="">Select a class…</option>
+                    {classes.map((cls: any) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.name}{cls.arm ? ` (${cls.arm})` : ''} — {cls.academic_session}
+                      </option>
+                    ))}
+                  </select>
+                  {classes.length === 0 && (
+                    <p className="text-[11px] text-[var(--color-text-muted)]">
+                      No classes found. Create a class first.
+                    </p>
+                  )}
                   {errors.class_id && (
                     <p className="text-xs text-red-500">
                       {errors.class_id.message}

@@ -42,6 +42,7 @@ frontend/.next/
 frontend/.pnpm-store/
 frontend/out/
 frontend/.turbo/
+frontend/build_output.txt
 
 # Docker — dev compose is safe, but ignore any prod overrides with real passwords
 docker-compose.prod.yml

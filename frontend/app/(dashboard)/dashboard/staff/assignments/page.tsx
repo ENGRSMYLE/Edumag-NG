@@ -25,65 +25,36 @@ import type { AssignmentListItem, AssignmentSubmission } from '@/types/assignmen
 type ActiveTab = 'mine' | 'grade';
 
 // ---------------------------------------------------------------------------
-// Mock data — replaced by real API once backend is wired
-// ---------------------------------------------------------------------------
-
-const MOCK_ASSIGNMENTS: AssignmentListItem[] = [
-  {
-    id: 'asgn-1',
-    title: 'Quadratic Equations Practice',
-    subject: 'Mathematics',
-    description: 'Solve problems 1–20 from Chapter 7.',
-    due_date: '2026-05-02',
-    max_score: 20,
-    submission_count: 18,
-    graded_count: 12,
-    created_at: '2026-04-20T09:00:00',
-  },
-  {
-    id: 'asgn-2',
-    title: 'Essay: My Future Career',
-    subject: 'English Language',
-    description: 'Write a 500-word essay on your future career goals.',
-    due_date: '2026-04-30',
-    max_score: 30,
-    submission_count: 25,
-    graded_count: 25,
-    created_at: '2026-04-18T11:00:00',
-  },
-  {
-    id: 'asgn-3',
-    title: 'Living and Non-Living Things',
-    subject: 'Basic Science',
-    description: 'Research and present 5 examples each of living and non-living things.',
-    due_date: '2026-05-07',
-    max_score: 15,
-    submission_count: 8,
-    graded_count: 0,
-    created_at: '2026-04-22T08:00:00',
-  },
-];
-
-const MOCK_SUBMISSIONS: Record<string, AssignmentSubmission[]> = {
-  'asgn-1': [
-    { id: 'sub-1', student_id: 's1', student_name: 'Adaeze Okonkwo', submitted_at: '2026-04-28T14:22:00', score: 17, feedback: 'Well done!', is_graded: true },
-    { id: 'sub-2', student_id: 's2', student_name: 'Emeka Chukwu', submitted_at: '2026-04-29T09:15:00', score: undefined, feedback: '', is_graded: false },
-    { id: 'sub-3', student_id: 's3', student_name: 'Fatima Aliyu', submitted_at: '2026-04-27T16:40:00', score: 19, feedback: 'Excellent work!', is_graded: true },
-    { id: 'sub-4', student_id: 's4', student_name: 'Oluwaseun Bello', submitted_at: '2026-04-29T11:00:00', score: undefined, feedback: '', is_graded: false },
-    { id: 'sub-5', student_id: 's5', student_name: 'Chiamaka Eze', submitted_at: '2026-04-28T19:30:00', score: 15, feedback: 'Good effort.', is_graded: true },
-  ],
-  'asgn-2': [],
-  'asgn-3': [
-    { id: 'sub-6', student_id: 's1', student_name: 'Adaeze Okonkwo', submitted_at: '2026-04-29T10:00:00', score: undefined, feedback: '', is_graded: false },
-  ],
-};
-
-// ---------------------------------------------------------------------------
 // My Assignments tab
 // ---------------------------------------------------------------------------
 
 function MyAssignmentsTab() {
-  const assignments = MOCK_ASSIGNMENTS;
+  const { data, isLoading } = useQuery({
+    queryKey: ['assignments', { per_page: 50 }],
+    queryFn: () => assignmentsApi.list({ per_page: 50 }).then((r) => r.data),
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const assignments = (data?.items ?? []) as AssignmentListItem[];
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="card-shell">
+            <div className="card-core p-5 flex gap-4">
+              <div className="skeleton w-10 h-10 rounded-xl flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="skeleton h-4 w-48 rounded" />
+                <div className="skeleton h-3 w-64 rounded" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -178,12 +149,44 @@ function MyAssignmentsTab() {
 // ---------------------------------------------------------------------------
 
 function GradeSubmissionsTab() {
-  const [selectedId, setSelectedId] = useState<string>(MOCK_ASSIGNMENTS[0]?.id ?? '');
-  const [localGrades, setLocalGrades] = useState<Record<string, { score: string; feedback: string }>>({});
-  const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const queryClient = useQueryClient();
+  const { data: assignmentsData } = useQuery({
+    queryKey: ['assignments', { per_page: 50 }],
+    queryFn: () => assignmentsApi.list({ per_page: 50 }).then((r) => r.data),
+    staleTime: 30_000,
+  });
 
-  const submissions = MOCK_SUBMISSIONS[selectedId] ?? [];
-  const selectedAsgn = MOCK_ASSIGNMENTS.find((a) => a.id === selectedId);
+  const assignments = (assignmentsData?.items ?? []) as AssignmentListItem[];
+  const [selectedId, setSelectedId] = useState<string>('');
+  const [localGrades, setLocalGrades] = useState<Record<string, { score: string; feedback: string }>>({});
+
+  const activeId = selectedId || assignments[0]?.id || '';
+
+  const { data: submissions, isLoading: subsLoading } = useQuery({
+    queryKey: ['assignments', activeId, 'submissions'],
+    queryFn: () => assignmentsApi.submissions(activeId).then((r) => r.data),
+    staleTime: 30_000,
+    retry: 1,
+    enabled: !!activeId,
+  });
+
+  const { mutate: gradeSubmission, isPending: grading } = useMutation({
+    mutationFn: ({ submissionId, data }: { submissionId: string; data: { score: number; feedback?: string } }) =>
+      assignmentsApi.grade(activeId, submissionId, data).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assignments', activeId, 'submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.detail ?? 'Failed to save grade';
+      toast.error(typeof msg === 'string' ? msg : 'Failed to save grade');
+    },
+  });
+
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const selectedAsgn = assignments.find((a) => a.id === activeId);
+  const maxScore = selectedAsgn?.max_score ?? 100;
 
   const setGrade = (subId: string, field: 'score' | 'feedback', value: string) => {
     setLocalGrades((prev) => ({
@@ -192,19 +195,25 @@ function GradeSubmissionsTab() {
     }));
   };
 
-  const handleSave = async (sub: AssignmentSubmission) => {
+  const handleSave = (sub: AssignmentSubmission) => {
     const g = localGrades[sub.id];
-    if (!g?.score) {
+    const scoreStr = g?.score ?? (sub.score != null ? String(sub.score) : '');
+    if (!scoreStr) {
       toast.error('Enter a score before saving');
       return;
     }
-    setSaving((prev) => ({ ...prev, [sub.id]: true }));
-    await new Promise((r) => setTimeout(r, 600));
-    setSaving((prev) => ({ ...prev, [sub.id]: false }));
-    toast.success(`Graded ${sub.student_name}`);
+    setSavingId(sub.id);
+    gradeSubmission(
+      {
+        submissionId: sub.id,
+        data: { score: parseFloat(scoreStr), feedback: g?.feedback || sub.feedback || undefined },
+      },
+      {
+        onSettled: () => setSavingId(null),
+        onSuccess: () => toast.success(`Graded ${sub.student_name}`),
+      },
+    );
   };
-
-  const maxScore = selectedAsgn?.max_score ?? 100;
 
   return (
     <div className="flex flex-col gap-4">
@@ -215,7 +224,7 @@ function GradeSubmissionsTab() {
             <ClipboardList className="w-4 h-4 text-[var(--color-text-muted)]" strokeWidth={1.5} />
             <span className="text-xs font-medium text-[var(--color-text-muted)]">Assignment:</span>
             <select
-              value={selectedId}
+              value={activeId}
               onChange={(e) => setSelectedId(e.target.value)}
               className={clsx(
                 'flex-1 max-w-xs text-sm rounded-lg px-3 py-1.5 cursor-pointer',
@@ -224,7 +233,7 @@ function GradeSubmissionsTab() {
                 'focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)]/30',
               )}
             >
-              {MOCK_ASSIGNMENTS.map((a) => (
+              {assignments.map((a) => (
                 <option key={a.id} value={a.id}>{a.title}</option>
               ))}
             </select>
@@ -238,7 +247,15 @@ function GradeSubmissionsTab() {
       </div>
 
       {/* Submissions */}
-      {submissions.length === 0 ? (
+      {subsLoading ? (
+        <div className="card-shell">
+          <div className="card-core p-5 space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="skeleton h-10 w-full rounded" />
+            ))}
+          </div>
+        </div>
+      ) : !submissions || submissions.length === 0 ? (
         <div className="card-shell">
           <div className="card-core p-10 text-center">
             <p className="text-sm font-medium text-[var(--color-text-primary)]">No submissions yet</p>
@@ -265,7 +282,7 @@ function GradeSubmissionsTab() {
                 const local = localGrades[sub.id];
                 const scoreVal = local?.score ?? (sub.score != null ? String(sub.score) : '');
                 const feedbackVal = local?.feedback ?? (sub.feedback ?? '');
-                const isBusy = saving[sub.id] ?? false;
+                const isBusy = savingId === sub.id;
 
                 return (
                   <div

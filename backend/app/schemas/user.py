@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -17,6 +18,7 @@ class UserResponse(BaseModel):
     class_id: uuid.UUID | None
     created_at: datetime
     last_login_at: datetime | None
+    invite_token: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

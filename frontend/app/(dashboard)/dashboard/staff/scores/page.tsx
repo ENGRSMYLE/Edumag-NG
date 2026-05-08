@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Save, Lock, CheckCircle2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
 
 import { PageHeader } from '@/components/shared/PageHeader';
-import { studentsApi } from '@/lib/api';
-import { getInitials } from '@/lib/formatters';
+import { studentsApi, resultsApi } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
+import { getInitials, getCurrentSession } from '@/lib/formatters';
 import type { StudentListItem } from '@/types/student';
 
 // ---------------------------------------------------------------------------
@@ -16,15 +17,21 @@ import type { StudentListItem } from '@/types/student';
 // ---------------------------------------------------------------------------
 
 const SUBJECTS = [
-  { name: 'Mathematics',              isApproved: false },
-  { name: 'English Language',         isApproved: false },
-  { name: 'Basic Science',            isApproved: true  },
-  { name: 'Social Studies',           isApproved: false },
-  { name: 'Civic Education',          isApproved: false },
-  { name: 'Christian Religious Stud.', isApproved: false },
-  { name: 'Computer Studies',         isApproved: true  },
-  { name: 'Agricultural Science',     isApproved: false },
-  { name: 'Physical Education',       isApproved: false },
+  'Mathematics',
+  'English Language',
+  'Basic Science',
+  'Social Studies',
+  'Civic Education',
+  'Christian Religious Studies',
+  'Computer Studies',
+  'Agricultural Science',
+  'Physical Education',
+];
+
+const TERMS = [
+  { value: 'first', label: 'First Term' },
+  { value: 'second', label: 'Second Term' },
+  { value: 'third', label: 'Third Term' },
 ];
 
 interface StudentScore {
@@ -71,15 +78,17 @@ function gradeColor(grade: string): string {
 function SubjectTabs({
   subjects,
   active,
+  approvedSet,
   onChange,
 }: {
-  subjects: typeof SUBJECTS;
+  subjects: string[];
   active: string;
+  approvedSet: Set<string>;
   onChange: (name: string) => void;
 }) {
   return (
     <div className="flex gap-1 flex-wrap">
-      {subjects.map(({ name, isApproved }) => (
+      {subjects.map((name) => (
         <button
           key={name}
           type="button"
@@ -92,7 +101,7 @@ function SubjectTabs({
               : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:border-[var(--color-navy)]/30 hover:text-[var(--color-text-primary)]',
           )}
         >
-          {isApproved && (
+          {approvedSet.has(name) && (
             <Lock className="w-2.5 h-2.5 text-amber-400" strokeWidth={2} />
           )}
           {name}
@@ -173,7 +182,7 @@ function ScoresTable({
   return (
     <div className="divide-y divide-[var(--color-border)]">
       {students.map((student, idx) => {
-        const fullName = `${student.first_name} ${student.last_name}`;
+        const fullName = student.full_name || `${student.first_name ?? ''} ${student.last_name ?? ''}`.trim() || 'Unknown';
         const s = scores[student.id] ?? { ca: '', exam: '', comment: '' };
         const total = getTotal(s);
         const grade = getGrade(total);
@@ -183,7 +192,7 @@ function ScoresTable({
           <div
             key={student.id}
             className={clsx(
-              'grid grid-cols-[1fr_80px_80px_60px_52px_180px] gap-3 px-5 py-2.5 items-center',
+              'grid grid-cols-[1fr_80px_80px_60px_52px_180px] gap-3 px-5 py-2.5 items-center min-w-[540px]',
               idx % 2 === 0 ? 'bg-[var(--color-cream)]' : 'bg-white',
               'transition-colors duration-100',
             )}
@@ -275,22 +284,68 @@ function ScoresTable({
 // ---------------------------------------------------------------------------
 
 export default function ScoresPage() {
-  const [selectedSubject, setSelectedSubject] = useState(SUBJECTS[0].name);
+  const { classId } = useAuth();
+  const queryClient = useQueryClient();
+  const [selectedSubject, setSelectedSubject] = useState(SUBJECTS[0]);
+  const [session, setSession] = useState('');
+  const [term, setTerm] = useState('first');
   const [scores, setScores] = useState<Record<string, Record<string, StudentScore>>>({});
-  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  const currentSubjectMeta = SUBJECTS.find((s) => s.name === selectedSubject)!;
-  const isApproved = currentSubjectMeta?.isApproved ?? false;
+  useEffect(() => { setSession(getCurrentSession()); }, []);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['students', { per_page: 100, is_active: true }],
-    queryFn: () => studentsApi.list({ per_page: 100, is_active: true }).then((r) => r.data),
+  const { data: studentsData, isLoading: studentsLoading } = useQuery({
+    queryKey: ['my-class-students', { per_page: 100 }],
+    queryFn: () => studentsApi.myClass({ per_page: 100, is_active: true }).then((r) => r.data),
     staleTime: 60_000,
     retry: 1,
+    enabled: !!classId,
   });
 
-  const students = (data?.items ?? []) as StudentListItem[];
+  const { data: existingResults, isLoading: resultsLoading } = useQuery({
+    queryKey: ['results', 'class', classId, { academic_session: session, term, subject: selectedSubject }],
+    queryFn: () => resultsApi.classResults(classId!, { academic_session: session, term, subject: selectedSubject }).then((r) => r.data),
+    staleTime: 30_000,
+    retry: 1,
+    enabled: !!classId && !!session,
+  });
+
+  // Pre-populate scores from existing results when data loads
+  useEffect(() => {
+    if (!existingResults) return;
+    const existing: Record<string, StudentScore> = {};
+    existingResults.forEach((r) => {
+      existing[r.student_id] = {
+        ca: r.ca_score != null ? String(r.ca_score) : '',
+        exam: r.exam_score != null ? String(r.exam_score) : '',
+        comment: r.teacher_comment ?? '',
+      };
+    });
+    setScores((prev) => ({ ...prev, [selectedSubject]: existing }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingResults]);
+
+  const { mutate: saveScores, isPending: isSaving } = useMutation({
+    mutationFn: (data: Parameters<typeof resultsApi.enterScores>[0]) =>
+      resultsApi.enterScores(data).then((r) => r.data),
+    onSuccess: (data) => {
+      toast.success(`${data.subject}: ${data.updated_count} scores saved`);
+      queryClient.invalidateQueries({ queryKey: ['results', 'class', classId] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.detail ?? 'Failed to save scores';
+      toast.error(typeof msg === 'string' ? msg : 'Failed to save scores');
+    },
+  });
+
+  const students = (studentsData?.items ?? []) as StudentListItem[];
   const subjectScores = scores[selectedSubject] ?? {};
+
+  const isApproved = (existingResults ?? []).some((r) => r.is_approved);
+  const approvedSet = new Set(
+    SUBJECTS.filter((subj) =>
+      subj === selectedSubject ? isApproved : false
+    )
+  );
 
   const enteredCount = students.filter((s) => {
     const sc = subjectScores[s.id];
@@ -314,12 +369,30 @@ export default function ScoresPage() {
   );
 
   const handleSave = () => {
-    const entered = students.filter((s) => {
-      const sc = subjectScores[s.id];
-      return sc && (sc.ca || sc.exam);
-    });
-    toast.success(`${selectedSubject}: ${entered.length}/${students.length} scores saved`);
+    if (!classId || !session) {
+      toast.error('Missing class or session');
+      return;
+    }
+    const entries = students
+      .filter((s) => {
+        const sc = subjectScores[s.id];
+        return sc && (sc.ca || sc.exam);
+      })
+      .map((s) => ({
+        student_id: s.id,
+        ca_score: parseFloat(subjectScores[s.id]?.ca || '0') || 0,
+        exam_score: parseFloat(subjectScores[s.id]?.exam || '0') || 0,
+      }));
+
+    if (entries.length === 0) {
+      toast.error('No scores entered to save');
+      return;
+    }
+
+    saveScores({ class_id: classId, academic_session: session, term, subject: selectedSubject, entries });
   };
+
+  const isLoading = studentsLoading || resultsLoading;
 
   return (
     <div className="flex flex-col gap-5">
@@ -328,12 +401,45 @@ export default function ScoresPage() {
         description="Record CA and exam scores by subject"
       />
 
+      {/* Session/Term selectors */}
+      <div className="flex flex-wrap items-center gap-3 -mt-1">
+        <input
+          type="text"
+          value={session}
+          onChange={(e) => setSession(e.target.value)}
+          placeholder="e.g. 2024/2025"
+          className={clsx(
+            'text-sm rounded-lg px-3 py-1.5 w-32',
+            'bg-[var(--color-surface)] border border-[var(--color-border)]',
+            'text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)]',
+            'focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)]/30',
+            'transition-all duration-150',
+          )}
+        />
+        <select
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+          className={clsx(
+            'text-sm rounded-lg px-3 py-1.5 cursor-pointer',
+            'bg-[var(--color-surface)] border border-[var(--color-border)]',
+            'text-[var(--color-text-primary)]',
+            'focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)]/30',
+            'transition-all duration-150',
+          )}
+        >
+          {TERMS.map((t) => (
+            <option key={t.value} value={t.value}>{t.label}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Subject tabs */}
       <div className="card-shell">
         <div className="card-core p-4 flex flex-col gap-3">
           <SubjectTabs
             subjects={SUBJECTS}
             active={selectedSubject}
+            approvedSet={approvedSet}
             onChange={setSelectedSubject}
           />
           <div className="flex items-center justify-between">
@@ -375,9 +481,9 @@ export default function ScoresPage() {
 
       {/* Scores table */}
       <div className="card-shell">
-        <div className="card-core">
+        <div className="card-core overflow-x-auto">
           {/* Table header */}
-          <div className="grid grid-cols-[1fr_80px_80px_60px_52px_180px] gap-3 px-5 py-3 border-b border-[var(--color-border)] bg-[var(--color-navy)]">
+          <div className="grid grid-cols-[1fr_80px_80px_60px_52px_180px] gap-3 px-5 py-3 border-b border-[var(--color-border)] bg-[var(--color-navy)] min-w-[540px]">
             <span className="text-xs font-semibold text-white/80 uppercase tracking-wide">Student</span>
             <span className="text-xs font-semibold text-white/80 uppercase tracking-wide text-center">CA (40)</span>
             <span className="text-xs font-semibold text-white/80 uppercase tracking-wide text-center">Exam (60)</span>
@@ -400,15 +506,16 @@ export default function ScoresPage() {
         <div className="flex justify-end">
           <button
             onClick={handleSave}
+            disabled={isSaving}
             className={clsx(
               'flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer',
               'bg-[var(--color-navy)] text-white',
               'hover:bg-[var(--color-navy-mid)] active:scale-[0.98]',
-              'transition-all duration-200',
+              'transition-all duration-200 disabled:opacity-60',
             )}
           >
             <Save className="w-4 h-4" strokeWidth={1.5} />
-            Save {selectedSubject}
+            {isSaving ? 'Saving…' : `Save ${selectedSubject}`}
           </button>
         </div>
       )}

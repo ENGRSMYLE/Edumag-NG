@@ -15,6 +15,7 @@ export function useAuth() {
     role: user?.role as UserRole | undefined,
     schoolName: user?.school_name,
     schoolId: user?.school_id,
+    classId: user?.current_class_id,
     isFirstLogin: user?.is_first_login ?? false,
   };
 }

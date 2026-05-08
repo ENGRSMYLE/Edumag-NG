@@ -60,7 +60,7 @@ _REFRESH_COOKIE = "refresh_token"
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
     secure = settings.is_production
-    samesite = "none" if settings.is_production else "strict"
+    samesite = "none" if settings.is_production else "lax"
     response.set_cookie(
         key=_ACCESS_COOKIE,
         value=access_token,
@@ -80,7 +80,7 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
 
 
 def _clear_auth_cookies(response: Response) -> None:
-    samesite = "none" if settings.is_production else "strict"
+    samesite = "none" if settings.is_production else "lax"
     secure = settings.is_production
     response.set_cookie(
         key=_ACCESS_COOKIE, value="", httponly=True,
@@ -130,6 +130,7 @@ def _build_token_response(
             membership_id=membership.id,
             is_first_login=user.is_first_login,
             profile_photo_url=user.profile_photo_url,
+            current_class_id=membership.class_id,
         ),
     )
 
@@ -816,7 +817,7 @@ async def logout(
 # ---------------------------------------------------------------------------
 
 @router.get("/me")
-@limiter.limit("5/minute")
+@limiter.limit("30/minute")
 async def me(
     request: Request,
     current_user: User = Depends(get_current_user),
@@ -849,6 +850,7 @@ async def me(
         membership_id=current_user.current_membership_id,  # type: ignore[attr-defined]
         is_first_login=current_user.is_first_login,
         profile_photo_url=current_user.profile_photo_url,
+        current_class_id=current_user.current_class_id,  # type: ignore[attr-defined]
     ).model_dump()
 
 
