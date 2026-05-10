@@ -79,7 +79,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
-          <SuperAdminSidebar collapsed={false} onToggle={() => setMobileOpen(false)} />
+          <SuperAdminSidebar collapsed={false} onToggle={() => setMobileOpen(false)} onClose={() => setMobileOpen(false)} />
         </div>
       </div>
 

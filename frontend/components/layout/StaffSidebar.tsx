@@ -13,6 +13,7 @@ import {
   ChevronRight,
   LogOut,
   GraduationCap,
+  X,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { LucideIcon } from 'lucide-react';
@@ -70,9 +71,10 @@ const NAV_SECTIONS: NavSection[] = [
 interface StaffSidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  onClose?: () => void;
 }
 
-export function StaffSidebar({ collapsed, onToggle }: StaffSidebarProps) {
+export function StaffSidebar({ collapsed, onToggle, onClose }: StaffSidebarProps) {
   const pathname = usePathname();
   const { user, schoolName, logout } = useAuth();
 
@@ -106,14 +108,25 @@ export function StaffSidebar({ collapsed, onToggle }: StaffSidebarProps) {
           <GraduationCap className="w-[18px] h-[18px] text-[var(--color-navy)]" strokeWidth={2} />
         </div>
         {!collapsed && (
-          <div className="min-w-0 flex-1 overflow-hidden">
-            <p className="text-sm font-bold text-white tracking-tight font-display leading-none">
-              EduMag NG
-            </p>
-            <p className="text-[11px] text-[var(--color-gold)] mt-0.5 truncate leading-tight opacity-90">
-              {schoolName ?? 'Your School'}
-            </p>
-          </div>
+          <>
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <p className="text-sm font-bold text-white tracking-tight font-display leading-none">
+                EduMag NG
+              </p>
+              <p className="text-[11px] text-[var(--color-gold)] mt-0.5 truncate leading-tight opacity-90">
+                {schoolName ?? 'Your School'}
+              </p>
+            </div>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="flex-shrink-0 p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors duration-150"
+                aria-label="Close menu"
+              >
+                <X className="w-4 h-4" strokeWidth={1.5} />
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -141,6 +154,7 @@ export function StaffSidebar({ collapsed, onToggle }: StaffSidebarProps) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={onClose}
                   title={collapsed ? item.label : undefined}
                   aria-current={active ? 'page' : undefined}
                   className={clsx(

@@ -76,7 +76,7 @@ export function StaffShell({ children }: StaffShellProps) {
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
-          <StaffSidebar collapsed={false} onToggle={() => setMobileOpen(false)} />
+          <StaffSidebar collapsed={false} onToggle={() => setMobileOpen(false)} onClose={() => setMobileOpen(false)} />
         </div>
       </div>
 

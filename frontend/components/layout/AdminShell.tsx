@@ -76,7 +76,7 @@ export function AdminShell({ children }: AdminShellProps) {
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
-          <AdminSidebar collapsed={false} onToggle={() => setMobileOpen(false)} />
+          <AdminSidebar collapsed={false} onToggle={() => setMobileOpen(false)} onClose={() => setMobileOpen(false)} />
         </div>
       </div>
 
