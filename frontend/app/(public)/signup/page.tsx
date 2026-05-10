@@ -52,7 +52,25 @@ const schema = z
     state: z.string().min(1, 'Select a state'),
     lga: z.string().min(2, 'LGA is required'),
     address: z.string().min(5, 'Enter a valid address'),
-    phone: z.string().min(8, 'Enter a valid phone number'),
+    phone: z.string().superRefine((val, ctx) => {
+      const digits = val.trim().replace(/\D/g, '');
+      const normalized = digits.replace(/^0/, ''); // strip optional leading 0 (field shows +234)
+      if (!normalized) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter a valid Nigerian phone number' });
+        return;
+      }
+      if (normalized.length < 10) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Phone number is too short' });
+        return;
+      }
+      if (normalized.length > 10) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Phone number is too long' });
+        return;
+      }
+      if (!/^[789]\d{9}$/.test(normalized)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter a valid Nigerian phone number' });
+      }
+    }),
     admin_name: z.string().min(2, 'Your name is required'),
     email: z.string().email('Enter a valid email address'),
     password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -190,6 +208,7 @@ export default function SignupPage() {
   const [otpError, setOtpError] = useState('');
   const [otpResetKey, setOtpResetKey] = useState(0);
   const [otpDisabled, setOtpDisabled] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'verifying' | 'creating' | null>(null);
@@ -224,7 +243,9 @@ export default function SignupPage() {
   // ── Step navigation ──────────────────────────────────────────────────────
 
   const goToStep2 = async () => {
+    setIsNavigating(true);
     const valid = await trigger(['school_name', 'school_type', 'state', 'lga', 'address', 'phone']);
+    setIsNavigating(false);
     if (valid) setStep(2);
   };
 
@@ -241,7 +262,11 @@ export default function SignupPage() {
   // ── Send OTP ─────────────────────────────────────────────────────────────
 
   const handleSendOTP = async () => {
-    const valid = await trigger(['admin_name', 'email', 'password', 'confirm_password', 'terms']);
+    // Re-validate all collected fields — guards against any partial state reaching the backend
+    const valid = await trigger([
+      'school_name', 'school_type', 'state', 'lga', 'address', 'phone',
+      'admin_name', 'email', 'password', 'confirm_password', 'terms',
+    ]);
     if (!valid) return;
 
     setEmailAlreadyExists(false);
@@ -636,16 +661,19 @@ export default function SignupPage() {
               <button
                 type="button"
                 onClick={goToStep2}
+                disabled={isNavigating}
                 className={clsx(
                   'w-full py-3 mt-1 rounded-xl text-sm font-semibold',
                   'bg-[var(--color-navy)] text-white',
                   'hover:bg-[var(--color-navy-mid)] active:scale-[0.98]',
                   'flex items-center justify-center gap-2',
                   'transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
+                  'disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100',
                 )}
               >
-                Continue
-                <ChevronRight className="w-4 h-4" strokeWidth={2} />
+                {isNavigating
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <>Continue <ChevronRight className="w-4 h-4" strokeWidth={2} /></>}
               </button>
             </div>
           )}
