@@ -11,7 +11,8 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 
-from fastapi import FastAPI, Request, status
+import os
+from fastapi import FastAPI, Request, status, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -118,3 +119,26 @@ async def on_startup() -> None:
     logger.info(
         "EduMag NG API starting — environment=%s", settings.ENVIRONMENT
     )
+
+
+# ---------------------------------------------------------------------------
+# TEMPORARY — delete after use
+# ---------------------------------------------------------------------------
+_TRUNCATE_SECRET = os.environ.get("TRUNCATE_SECRET", "")
+
+@app.post("/admin/truncate-db")
+async def truncate_db(x_truncate_secret: str = Header(...)):
+    if not _TRUNCATE_SECRET or x_truncate_secret != _TRUNCATE_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    from sqlalchemy import text
+    from app.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        )
+        tables = [row[0] for row in result.fetchall()]
+        names = ", ".join(f'"{t}"' for t in tables)
+        await session.execute(text(f"TRUNCATE TABLE {names} RESTART IDENTITY CASCADE"))
+        await session.commit()
+    logger.warning("DATABASE TRUNCATED via /admin/truncate-db")
+    return {"truncated": tables}
