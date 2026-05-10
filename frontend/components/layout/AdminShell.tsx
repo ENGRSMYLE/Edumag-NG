@@ -72,7 +72,7 @@ export function AdminShell({ children }: AdminShellProps) {
         />
         <div
           className={clsx(
-            'fixed inset-y-0 left-0 z-modal transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
+            'fixed inset-y-0 left-0 z-modal w-[260px] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
