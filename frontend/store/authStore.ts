@@ -5,12 +5,16 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { AuthUser, SchoolOption, TokenResponse } from '@/types/auth';
 
+const ROUTING_COOKIE_MAX_AGE = 7 * 24 * 60 * 60;
+
 interface AuthState {
   user: AuthUser | null;
   /** In-memory only — excluded from sessionStorage via partialize. */
   accessToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** True after Zustand has restored (or attempted to restore) session state. */
+  hasHydrated: boolean;
 
   /** Set when login returns multiple schools — cleared after school selection. */
   schools: SchoolOption[] | null;
@@ -22,6 +26,7 @@ interface AuthState {
   setUser: (user: AuthUser) => void;
   setAccessToken: (token: string) => void;
   setLoading: (loading: boolean) => void;
+  finishHydration: () => void;
   setSchoolOptions: (schools: SchoolOption[], tempToken: string) => void;
   clearSchoolSelection: () => void;
   switchSchool: (user: AuthUser, accessToken: string) => void;
@@ -34,6 +39,7 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       isAuthenticated: false,
       isLoading: false,
+      hasHydrated: false,
       schools: null,
       tempToken: null,
       requiresSchoolSelection: false,
@@ -52,8 +58,7 @@ export const useAuthStore = create<AuthState>()(
         // see auth state. The real JWT lives in the httpOnly cookie on the API
         // domain — this cookie only carries role + expiry for routing decisions.
         if (typeof document !== 'undefined') {
-          const maxAge = 15 * 60; // 15 minutes — matches ACCESS_TOKEN_EXPIRE_MINUTES
-          document.cookie = `_auth_role=${tokenResponse.user.role}; path=/; max-age=${maxAge}; SameSite=Lax`;
+          document.cookie = `_auth_role=${tokenResponse.user.role}; path=/; max-age=${ROUTING_COOKIE_MAX_AGE}; SameSite=Lax`;
         }
       },
 
@@ -85,6 +90,14 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: loading });
       },
 
+      finishHydration() {
+        set((state) => ({
+          hasHydrated: true,
+          // A persisted authenticated flag without a user is invalid state.
+          isAuthenticated: Boolean(state.user && state.isAuthenticated),
+        }));
+      },
+
       setSchoolOptions(schools, tempToken) {
         set({
           schools,
@@ -109,8 +122,7 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
         });
         if (typeof document !== 'undefined') {
-          const maxAge = 15 * 60;
-          document.cookie = `_auth_role=${user.role}; path=/; max-age=${maxAge}; SameSite=Lax`;
+          document.cookie = `_auth_role=${user.role}; path=/; max-age=${ROUTING_COOKIE_MAX_AGE}; SameSite=Lax`;
         }
       },
     }),
@@ -129,6 +141,22 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.finishHydration();
+          return;
+        }
+
+        // A malformed/unavailable sessionStorage entry must not leave every
+        // protected layout on its loading screen forever.
+        queueMicrotask(() => {
+          useAuthStore.setState({
+            user: null,
+            isAuthenticated: false,
+            hasHydrated: true,
+          });
+        });
+      },
     },
   ),
 );

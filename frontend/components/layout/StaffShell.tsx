@@ -16,18 +16,18 @@ interface StaffShellProps {
 export function StaffShell({ children }: StaffShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { isAuthenticated, role, isLoading } = useAuth();
+  const { isAuthenticated, role, isLoading, hasHydrated } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (!hasHydrated || isLoading) return;
     if (!isAuthenticated) {
       router.replace('/login');
       return;
     }
     if (role === 'super_admin') { router.replace('/dashboard/super-admin'); return; }
     if (role === 'admin') { router.replace('/dashboard/admin'); return; }
-  }, [isAuthenticated, role, isLoading, router]);
+  }, [hasHydrated, isAuthenticated, role, isLoading, router]);
 
   useEffect(() => {
     const onResize = () => {
@@ -42,7 +42,7 @@ export function StaffShell({ children }: StaffShellProps) {
     return () => { document.body.style.overflow = ''; };
   }, [mobileOpen]);
 
-  if (isLoading || !isAuthenticated || role !== 'teacher') {
+  if (!hasHydrated || isLoading || !isAuthenticated || role !== 'teacher') {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-cream)]">
         <div className="w-7 h-7 rounded-full border-2 border-[var(--color-navy)] border-t-transparent animate-spin" />

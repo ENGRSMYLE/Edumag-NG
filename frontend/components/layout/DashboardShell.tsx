@@ -16,18 +16,18 @@ interface DashboardShellProps {
 export function DashboardShell({ children }: DashboardShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { isAuthenticated, role, isLoading } = useAuth();
+  const { isAuthenticated, role, isLoading, hasHydrated } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (!hasHydrated || isLoading) return;
     if (!isAuthenticated) {
       router.replace('/login');
       return;
     }
     if (role === 'admin') { router.replace('/dashboard/admin'); return; }
     if (role === 'teacher') { router.replace('/dashboard/staff'); return; }
-  }, [isAuthenticated, role, isLoading, router]);
+  }, [hasHydrated, isAuthenticated, role, isLoading, router]);
 
   useEffect(() => {
     const onResize = () => {
@@ -43,7 +43,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
     return () => { document.body.style.overflow = ''; };
   }, [mobileOpen]);
 
-  if (isLoading || !isAuthenticated || role !== 'super_admin') {
+  if (!hasHydrated || isLoading || !isAuthenticated || role !== 'super_admin') {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-cream)]">
         <div className="w-7 h-7 rounded-full border-2 border-[var(--color-navy)] border-t-transparent animate-spin" />

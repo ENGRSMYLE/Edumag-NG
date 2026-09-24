@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,7 @@ from app.models.grading_system import GradingSystem
 from app.models.school import School
 from app.models.school_term import SchoolTerm, SchoolTermEnum
 from app.models.user import User
+from app.services.cloudinary_service import upload_school_logo
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -86,6 +87,10 @@ class AcademicTermIn(BaseModel):
     end_date: str
 
 
+class LogoUploadOut(BaseModel):
+    url: str
+
+
 # ---------------------------------------------------------------------------
 # GET /settings/school
 # ---------------------------------------------------------------------------
@@ -114,6 +119,52 @@ async def get_school_settings(
         report_header=school.report_header,
         report_logo_position=school.report_logo_position,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /settings/logo
+# ---------------------------------------------------------------------------
+
+_ALLOWED_LOGO_TYPES = {"image/jpeg", "image/png", "image/webp"}
+_MAX_LOGO_BYTES = 1024 * 1024
+
+
+@router.post("/logo", response_model=LogoUploadOut)
+async def upload_logo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_role("super_admin", "admin")),
+    db: AsyncSession = Depends(get_db),
+) -> LogoUploadOut:
+    if file.content_type not in _ALLOWED_LOGO_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Logo must be a JPEG, PNG, or WebP image",
+        )
+
+    content = await file.read(_MAX_LOGO_BYTES + 1)
+    if not content:
+        raise HTTPException(status_code=400, detail="Logo file is empty")
+    if len(content) > _MAX_LOGO_BYTES:
+        raise HTTPException(status_code=413, detail="Logo must not exceed 1 MB")
+
+    school_id: uuid.UUID = current_user.current_school_id  # type: ignore[assignment]
+    school = (await db.execute(
+        select(School).where(School.id == school_id)
+    )).scalar_one_or_none()
+    if not school:
+        raise HTTPException(status_code=404, detail="School not found")
+
+    try:
+        logo_url = await upload_school_logo(content, school_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to upload school logo",
+        )
+
+    school.logo_url = logo_url
+    await db.commit()
+    return LogoUploadOut(url=logo_url)
 
 
 # ---------------------------------------------------------------------------

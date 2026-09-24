@@ -13,6 +13,7 @@ interface FileUploadProps {
   maxSize?: number;
   currentUrl?: string;
   label?: string;
+  uploadFile?: (file: File) => Promise<{ url: string }>;
 }
 
 function isImageUrl(url: string) {
@@ -26,6 +27,7 @@ export function FileUpload({
   maxSize = 10 * 1024 * 1024,
   currentUrl,
   label,
+  uploadFile,
 }: FileUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +64,9 @@ export function FileUpload({
       setFileName(file.name);
 
       try {
-        const result = await uploadToCloudinary(file, folder);
+        const result = uploadFile
+          ? await uploadFile(file)
+          : await uploadToCloudinary(file, folder);
         setUploadedUrl(result.url);
         onUpload(result.url);
       } catch (err: any) {
@@ -72,7 +76,7 @@ export function FileUpload({
         setUploading(false);
       }
     },
-    [folder, maxSize, onUpload]
+    [folder, maxSize, onUpload, uploadFile]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

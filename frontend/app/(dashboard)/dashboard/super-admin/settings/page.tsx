@@ -99,6 +99,7 @@ function ProfileTab({ settings }: { settings: SchoolSettings | undefined }) {
         <div className="md:col-span-2">
           <FileUpload
             folder="schools"
+            uploadFile={(file) => settingsApi.uploadLogo(file).then((response) => response.data)}
             accept="image/*"
             maxSize={1024 * 1024}
             label="School Logo"

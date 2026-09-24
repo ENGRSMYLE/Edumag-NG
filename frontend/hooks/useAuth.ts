@@ -4,12 +4,13 @@ import { useAuthStore } from '@/store/authStore';
 import type { UserRole } from '@/types/auth';
 
 export function useAuth() {
-  const { user, isAuthenticated, isLoading, login, logout } = useAuthStore();
+  const { user, isAuthenticated, isLoading, hasHydrated, login, logout } = useAuthStore();
 
   return {
     user,
     isAuthenticated,
     isLoading,
+    hasHydrated,
     login,
     logout,
     role: user?.role as UserRole | undefined,

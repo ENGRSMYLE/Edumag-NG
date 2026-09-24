@@ -89,14 +89,18 @@ api.interceptors.request.use((config) => {
 // ---------------------------------------------------------------------------
 
 let isRefreshing = false;
-let refreshQueue: Array<(token: string) => void> = [];
+let refreshQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+}> = [];
 
 function drainQueue(token: string) {
-  refreshQueue.forEach((cb) => cb(token));
+  refreshQueue.forEach(({ resolve }) => resolve(token));
   refreshQueue = [];
 }
 
-function flushQueueWithError() {
+function flushQueueWithError(error: unknown) {
+  refreshQueue.forEach(({ reject }) => reject(error));
   refreshQueue = [];
 }
 
@@ -139,8 +143,8 @@ api.interceptors.response.use(
 
     if (isRefreshing) {
       // Another request already triggered a refresh — queue this one
-      return new Promise<string>((resolve) => {
-        refreshQueue.push(resolve);
+      return new Promise<string>((resolve, reject) => {
+        refreshQueue.push({ resolve, reject });
       }).then((newToken) => {
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
@@ -151,7 +155,7 @@ api.interceptors.response.use(
 
     try {
       // Use a bare axios call to avoid going through our own interceptors
-      const { data } = await axios.post<{ access_token: string }>(
+      const { data } = await axios.post<TokenResponse>(
         `${api.defaults.baseURL}/auth/refresh`,
         {},
         { withCredentials: true },
@@ -159,13 +163,13 @@ api.interceptors.response.use(
 
       const newToken = data.access_token;
       const { useAuthStore } = require('@/store/authStore');
-      useAuthStore.getState().setAccessToken(newToken);
+      useAuthStore.getState().login(data);
 
       drainQueue(newToken);
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return api(originalRequest);
-    } catch {
-      flushQueueWithError();
+    } catch (refreshError) {
+      flushQueueWithError(refreshError);
       _forceLogout();
       return Promise.reject(error);
     } finally {
