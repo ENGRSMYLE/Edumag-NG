@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.rbac import require_permission
-from app.models.communication import Announcement, Message
+from app.models.communication import Announcement, Message, TargetAudience
 from app.models.school_membership import MembershipRole, SchoolMembership
 from app.models.user import User
 from app.schemas.communication import (
@@ -121,6 +121,18 @@ async def list_announcements(
         .options(selectinload(Announcement.sender))
         .order_by(Announcement.created_at.desc())
     )
+
+    # Administrators manage the announcement feed and can review everything
+    # they have published. Teachers only receive school-wide or teacher notices.
+    role = current_user.current_role.value  # type: ignore[attr-defined]
+    if role == MembershipRole.teacher.value:
+        q = q.where(
+            Announcement.target_audience.in_([
+                TargetAudience.all,
+                TargetAudience.teacher,
+            ])
+        )
+
     if target_audience:
         q = q.where(Announcement.target_audience == target_audience)
 

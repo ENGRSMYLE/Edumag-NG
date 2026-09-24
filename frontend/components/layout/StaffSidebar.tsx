@@ -63,7 +63,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'COMMUNICATION',
     items: [
-      { href: '/dashboard/staff/communication', icon: MessageSquare, label: 'Message Admin' },
+      { href: '/dashboard/staff/communication', icon: MessageSquare, label: 'Communication' },
     ],
   },
 ];

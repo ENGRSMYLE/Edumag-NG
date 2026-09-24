@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   MessageSquare,
+  Megaphone,
   Plus,
   Send,
   X,
@@ -18,6 +19,7 @@ import { createPortal } from 'react-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { communicationApi } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
+import { useAnnouncements } from '@/hooks/useCommunication';
 import type { MessageResponse } from '@/types/communication';
 
 // ---------------------------------------------------------------------------
@@ -293,6 +295,10 @@ export default function StaffCommunicationPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
 
+  const { data: announcementsData, isLoading: announcementsLoading } =
+    useAnnouncements({ per_page: 20 });
+  const announcements = announcementsData?.items ?? [];
+
   // Get users this teacher is allowed to message (admins / super_admins)
   const { data: recipients = [] } = useQuery({
     queryKey: ['communication-recipients'],
@@ -342,8 +348,8 @@ export default function StaffCommunicationPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Messages"
-        description="Communicate directly with the school admin"
+        title="Communication"
+        description="Read school announcements and communicate with the school admin"
         actions={
           <button
             type="button"
@@ -360,6 +366,60 @@ export default function StaffCommunicationPage() {
           </button>
         }
       />
+
+      <section className="card-shell" aria-labelledby="staff-announcements-heading">
+        <div className="card-core">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
+            <div className="flex items-center gap-2.5">
+              <Megaphone className="w-4 h-4 text-[var(--color-gold)]" strokeWidth={1.5} />
+              <h2 id="staff-announcements-heading" className="text-sm font-semibold text-[var(--color-text-primary)]">
+                Announcements
+              </h2>
+            </div>
+            {announcements.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-[var(--color-navy)]/8 text-[10px] font-bold text-[var(--color-navy)]">
+                {announcementsData?.total ?? announcements.length}
+              </span>
+            )}
+          </div>
+
+          {announcementsLoading ? (
+            <div className="p-5 space-y-3">
+              {Array.from({ length: 2 }).map((_, index) => (
+                <div key={index} className="space-y-2">
+                  <div className="skeleton h-4 w-1/3 rounded" />
+                  <div className="skeleton h-3 w-full rounded" />
+                </div>
+              ))}
+            </div>
+          ) : announcements.length === 0 ? (
+            <p className="px-5 py-8 text-sm text-center text-[var(--color-text-muted)]">
+              No announcements for teachers yet.
+            </p>
+          ) : (
+            <div className="divide-y divide-[var(--color-border)]">
+              {announcements.map((announcement) => (
+                <article key={announcement.id} className="px-5 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                      {announcement.title}
+                    </h3>
+                    <time className="text-[10px] text-[var(--color-text-muted)] whitespace-nowrap">
+                      {new Date(announcement.created_at).toLocaleDateString('en-NG')}
+                    </time>
+                  </div>
+                  <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-wrap text-[var(--color-text-secondary)]">
+                    {announcement.body}
+                  </p>
+                  <p className="mt-2 text-[10px] text-[var(--color-text-muted)]">
+                    Posted by {announcement.sent_by_name}
+                  </p>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-blue-50 ring-1 ring-blue-100">
         <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" strokeWidth={1.5} />

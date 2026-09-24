@@ -133,6 +133,48 @@ async def test_announcement_school_isolation(client: AsyncClient) -> None:
     assert list_b.json()["total"] == 0
 
 
+async def test_teacher_sees_only_relevant_announcements(client: AsyncClient) -> None:
+    """Teachers receive school-wide and teacher notices, never admin-only ones."""
+    school = await _register_school(client)
+    admin_token = school["access_token"]
+    teacher_token, _ = await _invite_user(
+        client,
+        admin_token,
+        email="announcement-teacher@comm.ng",
+        role="teacher",
+        name="Announcement Teacher",
+    )
+
+    for audience in ("all", "admin", "teacher"):
+        response = await client.post(
+            "/api/communication/announcements",
+            json={
+                "title": f"Notice for {audience}",
+                "body": f"Audience: {audience}",
+                "target_audience": audience,
+            },
+            headers=_auth(admin_token),
+        )
+        assert response.status_code == 201, response.text
+
+    admin_list = await client.get(
+        "/api/communication/announcements",
+        headers=_auth(admin_token),
+    )
+    assert admin_list.status_code == 200, admin_list.text
+    assert admin_list.json()["total"] == 3
+
+    teacher_list = await client.get(
+        "/api/communication/announcements",
+        headers=_auth(teacher_token),
+    )
+    assert teacher_list.status_code == 200, teacher_list.text
+    assert teacher_list.json()["total"] == 2
+    assert {
+        item["target_audience"] for item in teacher_list.json()["items"]
+    } == {"all", "teacher"}
+
+
 # ---------------------------------------------------------------------------
 # test_unread_count_correct
 # ---------------------------------------------------------------------------
