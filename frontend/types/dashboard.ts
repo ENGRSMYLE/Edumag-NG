@@ -55,6 +55,18 @@ export interface FinanceStats {
 export type PaymentType = 'school_fees' | 'development_levy' | 'exam_fees' | 'other';
 export type PaymentMethod = 'cash' | 'bank_transfer' | 'paystack' | 'pos';
 export type PaymentStatus = 'pending' | 'confirmed' | 'rejected';
+export type AcademicTermValue = 'first' | 'second' | 'third';
+
+/** Request body accepted by POST /finance/payments. */
+export interface RecordPaymentRequest {
+  student_id: string;
+  amount_kobo: number;
+  payment_type: PaymentType;
+  payment_method: PaymentMethod;
+  academic_session: string;
+  term: AcademicTermValue;
+  notes?: string;
+}
 
 export interface PaymentListItem {
   id: string;

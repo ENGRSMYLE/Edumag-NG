@@ -16,9 +16,9 @@ export function middleware(request: NextRequest) {
   const isLanding = pathname === LANDING_ROUTE;
   const isDashboard = pathname.startsWith('/dashboard');
 
-  // _auth_role is a short-lived JS-readable cookie set on THIS domain by the
-  // auth store after login. It carries the user's role for routing only.
-  // The real JWT lives in the httpOnly cookie on the API domain.
+  // _auth_role is a JS-readable routing hint set on THIS domain by the auth
+  // store after login and renewed after a successful silent token refresh.
+  // The real credentials remain in the API domain's httpOnly cookies.
   const role = request.cookies.get('_auth_role')?.value ?? null;
   const isAuthenticated = !!role;
   const roleHome = role ? ROLE_HOME[role] : null;

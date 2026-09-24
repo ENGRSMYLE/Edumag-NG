@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { financeApi } from '@/lib/api';
-import type { PaymentListParams, DebtorListParams } from '@/types/dashboard';
+import type { PaymentListParams, DebtorListParams, RecordPaymentRequest } from '@/types/dashboard';
 
 export function useFinancialSummary(params?: { academic_session?: string; term?: string }) {
   return useQuery({
@@ -26,15 +26,8 @@ export function useDebtors(params?: DebtorListParams) {
 export function useRecordPayment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: {
-      student_id: string;
-      amount_kobo: number;
-      payment_type: string;
-      payment_method: string;
-      session?: string;
-      term?: string;
-      notes?: string;
-    }) => financeApi.recordPayment(data).then((r) => r.data),
+    mutationFn: (data: RecordPaymentRequest) =>
+      financeApi.recordPayment(data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['payments'] });
       qc.invalidateQueries({ queryKey: ['finance-summary'] });

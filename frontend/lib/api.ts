@@ -23,6 +23,7 @@ import type {
   FinanceStats,
   PaymentListItem,
   PaymentListParams,
+  RecordPaymentRequest,
   DebtorListItem,
   DebtorListParams,
   ResultListItem,
@@ -216,7 +217,7 @@ export const authApi = {
     api.post<TokenResponse>('/auth/set-password', data),
 
   refresh: () =>
-    api.post<{ access_token: string }>('/auth/refresh'),
+    api.post<TokenResponse>('/auth/refresh'),
 
   sendOTP: (data: SendOTPRequest) =>
     api.post<{ message: string; expires_in_minutes: number }>('/auth/send-otp', data),
@@ -451,7 +452,7 @@ export const financeApi = {
   debtors: (params?: DebtorListParams) =>
     api.get<PaginatedResponse<DebtorListItem>>('/finance/debtors', { params }),
 
-  recordPayment: (data: { student_id: string; amount_kobo: number; payment_type: string; payment_method: string; session?: string; term?: string; notes?: string }) =>
+  recordPayment: (data: RecordPaymentRequest) =>
     api.post<PaymentListItem>('/finance/payments', data),
 
   confirmPayment: (id: string, data: { note?: string }) =>
