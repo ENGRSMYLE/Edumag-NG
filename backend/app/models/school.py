@@ -41,6 +41,11 @@ class School(Base):
     phone: Mapped[str] = mapped_column(String(20), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    motto: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    report_header: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    report_logo_position: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="center", server_default="center"
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     subscription_plan: Mapped[SubscriptionPlan] = mapped_column(
         Enum(SubscriptionPlan, name="subscription_plan_enum"),

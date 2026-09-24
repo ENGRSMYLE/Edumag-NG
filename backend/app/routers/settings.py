@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,21 +37,21 @@ class SchoolSettingsOut(BaseModel):
     logo_url: str | None = None
     motto: str | None = None
     report_header: str | None = None
-    report_logo_position: str | None = None
+    report_logo_position: Literal["left", "center", "right"] = "center"
 
     class Config:
         from_attributes = True
 
 
 class SchoolSettingsUpdate(BaseModel):
-    name: str | None = None
-    address: str | None = None
-    phone: str | None = None
-    email: str | None = None
-    logo_url: str | None = None
-    motto: str | None = None
-    report_header: str | None = None
-    report_logo_position: str | None = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    address: str | None = Field(None, min_length=1, max_length=500)
+    phone: str | None = Field(None, min_length=1, max_length=20)
+    email: str | None = Field(None, min_length=1, max_length=255)
+    logo_url: str | None = Field(None, max_length=500)
+    motto: str | None = Field(None, max_length=255)
+    report_header: str | None = Field(None, max_length=500)
+    report_logo_position: Literal["left", "center", "right"] | None = None
 
 
 class GradeScaleOut(BaseModel):
@@ -110,6 +110,9 @@ async def get_school_settings(
         phone=school.phone,
         email=school.email,
         logo_url=school.logo_url,
+        motto=school.motto,
+        report_header=school.report_header,
+        report_logo_position=school.report_logo_position,
     )
 
 
@@ -146,6 +149,9 @@ async def update_school_settings(
         phone=school.phone,
         email=school.email,
         logo_url=school.logo_url,
+        motto=school.motto,
+        report_header=school.report_header,
+        report_logo_position=school.report_logo_position,
     )
 
 
