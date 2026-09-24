@@ -104,6 +104,10 @@ class PaginatedStudentResponse(BaseModel):
     total_pages: int
 
 
+class AdmissionNumberResponse(BaseModel):
+    admission_number: str
+
+
 # ---------------------------------------------------------------------------
 # Bulk upload
 # ---------------------------------------------------------------------------

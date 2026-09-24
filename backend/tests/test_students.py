@@ -118,6 +118,47 @@ async def test_create_student_auto_admission_number(client: AsyncClient) -> None
     assert seqs == sorted(seqs)
 
 
+async def test_generate_admission_number_is_sequential_and_school_scoped(
+    client: AsyncClient,
+) -> None:
+    school_a = await _register_school(
+        client, name="School Alpha", email="alpha-admissions@school.ng"
+    )
+    school_b = await _register_school(
+        client, name="School Beta", email="beta-admissions@school.ng"
+    )
+
+    first_a = await client.get(
+        "/api/students/generate-admission-number",
+        headers=_auth(school_a["access_token"]),
+    )
+    assert first_a.status_code == 200, first_a.text
+    first_number = first_a.json()["admission_number"]
+    assert first_number.startswith("SCH-")
+    assert first_number.endswith("-0001")
+
+    create_response = await client.post(
+        "/api/students/",
+        json={**_STUDENT_BASE, "admission_number": first_number},
+        headers=_auth(school_a["access_token"]),
+    )
+    assert create_response.status_code == 201, create_response.text
+
+    next_a = await client.get(
+        "/api/students/generate-admission-number",
+        headers=_auth(school_a["access_token"]),
+    )
+    assert next_a.status_code == 200, next_a.text
+    assert next_a.json()["admission_number"].endswith("-0002")
+
+    first_b = await client.get(
+        "/api/students/generate-admission-number",
+        headers=_auth(school_b["access_token"]),
+    )
+    assert first_b.status_code == 200, first_b.text
+    assert first_b.json()["admission_number"].endswith("-0001")
+
+
 # ---------------------------------------------------------------------------
 # test_get_students_school_isolation
 # ---------------------------------------------------------------------------

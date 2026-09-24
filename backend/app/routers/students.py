@@ -21,6 +21,7 @@ from app.models.class_ import Class
 from app.models.student import Gender, Student
 from app.models.user import User
 from app.schemas.student import (
+    AdmissionNumberResponse,
     AssignClassRequest,
     BulkUploadRequest,
     BulkUploadResult,
@@ -322,6 +323,21 @@ async def list_my_class_students(
         per_page=per_page,
         total_pages=max(1, (total + per_page - 1) // per_page),
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /students/generate-admission-number
+# ---------------------------------------------------------------------------
+
+@router.get("/generate-admission-number", response_model=AdmissionNumberResponse)
+async def get_next_admission_number(
+    current_user: User = Depends(require_permission("create_student")),
+    db: AsyncSession = Depends(get_db),
+) -> AdmissionNumberResponse:
+    """Preview the next admission number for the current school."""
+    school_id: uuid.UUID = current_user.current_school_id  # type: ignore[attr-defined]
+    admission_number = await generate_admission_number(db, school_id)
+    return AdmissionNumberResponse(admission_number=admission_number)
 
 
 # ---------------------------------------------------------------------------
