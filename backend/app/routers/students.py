@@ -9,7 +9,7 @@ import logging
 import uuid
 
 import openpyxl  # type: ignore
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +22,7 @@ from app.models.student import Gender, Student
 from app.models.user import User
 from app.schemas.student import (
     AssignClassRequest,
+    BulkUploadRequest,
     BulkUploadResult,
     PaginatedStudentResponse,
     StudentCreate,
@@ -541,18 +542,12 @@ async def promote_students(
 
 @router.post("/bulk-upload", response_model=BulkUploadResult)
 async def bulk_upload_students(
-    file: UploadFile = File(...),
+    body: BulkUploadRequest,
     current_user: User = Depends(require_permission("bulk_upload_students")),
     db: AsyncSession = Depends(get_db),
 ) -> BulkUploadResult:
-    if not file.filename or not file.filename.endswith(".xlsx"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only .xlsx files are supported",
-        )
-
     school_id: uuid.UUID = current_user.current_school_id  # type: ignore[attr-defined]
-    return await process_bulk_upload(db, file, school_id, current_user)
+    return await process_bulk_upload(db, body.rows, school_id, current_user)
 
 
 # ---------------------------------------------------------------------------

@@ -19,10 +19,11 @@ import {
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { studentsApi } from '@/lib/api';
+import type { BulkUploadResult } from '@/types/student';
 
 type Step = 1 | 2 | 3 | 4;
 
-const REQUIRED_COLS = ['admission_number', 'first_name', 'last_name', 'date_of_birth', 'gender'];
+const REQUIRED_COLS = ['first_name', 'last_name', 'date_of_birth', 'gender', 'admission_date'];
 const ALL_COLS = [
   'admission_number', 'first_name', 'last_name', 'middle_name',
   'date_of_birth', 'gender', 'class_name', 'state_of_origin',
@@ -33,11 +34,6 @@ interface ParsedRow {
   index: number;
   data: Record<string, string>;
   errors: string[];
-}
-
-interface UploadResult {
-  created: number;
-  errors: { row: number; message: string }[];
 }
 
 function validateRow(row: Record<string, unknown>, index: number): ParsedRow {
@@ -62,6 +58,10 @@ function validateRow(row: Record<string, unknown>, index: number): ParsedRow {
     errors.push('Date of birth must be YYYY-MM-DD');
   }
 
+  if (data.admission_date && !/^\d{4}-\d{2}-\d{2}$/.test(data.admission_date)) {
+    errors.push('Admission date must be YYYY-MM-DD');
+  }
+
   return { index, data, errors };
 }
 
@@ -70,7 +70,7 @@ export default function BulkUploadPage() {
   const [step, setStep] = useState<Step>(1);
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [fileName, setFileName] = useState('');
-  const [result, setResult] = useState<UploadResult | null>(null);
+  const [result, setResult] = useState<BulkUploadResult | null>(null);
 
   const validRows = parsedRows.filter((r) => r.errors.length === 0);
   const errorRows = parsedRows.filter((r) => r.errors.length > 0);
@@ -119,7 +119,9 @@ export default function BulkUploadPage() {
 
   const { mutate: submit, isPending } = useMutation({
     mutationFn: () => {
-      const payload = validRows.map((r) => r.data);
+      // Send every parsed row so the backend remains the source of truth for
+      // validation and can preserve the spreadsheet's original row numbers.
+      const payload = parsedRows.map((r) => r.data);
       return studentsApi.bulkUpload(payload as Record<string, unknown>[]);
     },
     onSuccess: (res) => {
@@ -134,6 +136,20 @@ export default function BulkUploadPage() {
   });
 
   const exportErrors = () => {
+    if (result?.error_rows.length) {
+      const ws = XLSX.utils.json_to_sheet(
+        result.error_rows.map((error) => ({
+          row: error.row,
+          admission_number: error.admission_number,
+          error: error.reason,
+        })),
+      );
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Errors');
+      XLSX.writeFile(wb, 'upload_errors.xlsx');
+      return;
+    }
+
     const rows = errorRows.map((r) => ({
       row: r.index,
       ...r.data,
@@ -450,14 +466,14 @@ export default function BulkUploadPage() {
                 Import Complete
               </h3>
               <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                <span className="font-medium text-emerald-600">{result.created} students</span> created successfully
-                {result.errors.length > 0 && (
-                  <>, <span className="font-medium text-red-600">{result.errors.length} rows</span> had errors</>
+                <span className="font-medium text-emerald-600">{result.success_count} students</span> created successfully
+                {result.error_rows.length > 0 && (
+                  <>, <span className="font-medium text-red-600">{result.error_rows.length} rows</span> had errors</>
                 )}.
               </p>
             </div>
             <div className="flex gap-3">
-              {result.errors.length > 0 && (
+              {result.error_rows.length > 0 && (
                 <button
                   onClick={exportErrors}
                   className={clsx(

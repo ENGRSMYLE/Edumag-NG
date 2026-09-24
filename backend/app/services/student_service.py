@@ -4,14 +4,13 @@ All functions are async and receive an open AsyncSession.
 """
 from __future__ import annotations
 
-import io
 import logging
 import re
 import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from fastapi import UploadFile
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -99,11 +98,11 @@ def validate_bulk_row(
     Returns (StudentCreate, None) on success or (None, error_message) on failure.
     classes_map: {class_name.lower(): class_id}
     """
-    first_name = _cell(row_data, "First Name")
-    last_name = _cell(row_data, "Last Name")
-    dob_raw = _cell(row_data, "Date of Birth")
-    gender_raw = _cell(row_data, "Gender").lower()
-    adm_date_raw = _cell(row_data, "Admission Date")
+    first_name = _cell(row_data, "first_name")
+    last_name = _cell(row_data, "last_name")
+    dob_raw = _cell(row_data, "date_of_birth")
+    gender_raw = _cell(row_data, "gender").lower()
+    adm_date_raw = _cell(row_data, "admission_date")
 
     if not first_name:
         return None, "First Name is required"
@@ -122,56 +121,49 @@ def validate_bulk_row(
         return None, f"Invalid Admission Date: '{adm_date_raw}' (use YYYY-MM-DD)"
 
     # Optional class lookup
-    class_name_raw = _cell(row_data, "Class Name")
+    class_name_raw = _cell(row_data, "class_name")
     class_id: uuid.UUID | None = None
     if class_name_raw:
         class_id = classes_map.get(class_name_raw.lower())
         if class_id is None:
             return None, f"Class '{class_name_raw}' not found in this school"
 
-    admission_number = _cell(row_data, "Admission Number") or None
+    admission_number = _cell(row_data, "admission_number") or None
 
-    return StudentCreate(
-        first_name=first_name,
-        last_name=last_name,
-        middle_name=_cell(row_data, "Middle Name") or None,
-        date_of_birth=dob,
-        gender=gender_raw,
-        admission_date=adm_date,
-        address=_cell(row_data, "Address") or None,
-        state_of_origin=_cell(row_data, "State of Origin") or None,
-        admission_number=admission_number,
-        class_id=class_id,
-    ), None
+    try:
+        student = StudentCreate(
+            first_name=first_name,
+            last_name=last_name,
+            middle_name=_cell(row_data, "middle_name") or None,
+            date_of_birth=dob,
+            gender=gender_raw,
+            admission_date=adm_date,
+            address=_cell(row_data, "address") or None,
+            state_of_origin=_cell(row_data, "state_of_origin") or None,
+            religion=_cell(row_data, "religion") or None,
+            blood_group=_cell(row_data, "blood_group") or None,
+            genotype=_cell(row_data, "genotype") or None,
+            admission_number=admission_number,
+            class_id=class_id,
+        )
+    except ValidationError as exc:
+        first_error = exc.errors()[0]
+        field = str(first_error.get("loc", ["row"])[-1]).replace("_", " ").title()
+        return None, f"{field}: {first_error['msg']}"
+
+    return student, None
 
 
 async def process_bulk_upload(
     db: AsyncSession,
-    file: UploadFile,
+    rows: list[dict],
     school_id: uuid.UUID,
     current_user: "User",
 ) -> BulkUploadResult:
     """
-    Parse an .xlsx file and create students row-by-row.
+    Validate parsed spreadsheet rows and create students row-by-row.
     Bad rows are collected in error_rows — never abort the whole upload.
     """
-    try:
-        import openpyxl  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError("openpyxl is required for bulk upload") from exc
-
-    content = await file.read()
-    wb = openpyxl.load_workbook(filename=io.BytesIO(content), read_only=True, data_only=True)
-    ws = wb.active
-
-    rows = list(ws.iter_rows(values_only=True))
-    if not rows:
-        return BulkUploadResult(success_count=0, error_rows=[], created_students=[])
-
-    # First row = headers
-    headers = [str(h).strip() if h is not None else "" for h in rows[0]]
-    data_rows = rows[1:]
-
     # Pre-load all classes for this school once
     from app.models.class_ import Class
     cls_result = await db.execute(
@@ -190,9 +182,8 @@ async def process_bulk_upload(
     error_rows: list[BulkUploadErrorRow] = []
     created: list[StudentListItem] = []
 
-    for row_idx, raw_row in enumerate(data_rows, start=2):  # 1-indexed, row 1 = header
-        row_dict = {headers[i]: raw_row[i] for i in range(min(len(headers), len(raw_row)))}
-        adm_label = _cell(row_dict, "Admission Number") or f"row-{row_idx}"
+    for row_idx, row_dict in enumerate(rows, start=2):  # spreadsheet row 1 is the header
+        adm_label = _cell(row_dict, "admission_number") or f"row-{row_idx}"
 
         student_create, err = validate_bulk_row(row_dict, school_id, classes_map)
         if err:
@@ -227,6 +218,9 @@ async def process_bulk_upload(
             admission_date=student_create.admission_date,
             address=student_create.address,
             state_of_origin=student_create.state_of_origin,
+            religion=student_create.religion,
+            blood_group=student_create.blood_group,
+            genotype=student_create.genotype,
             class_id=student_create.class_id,
             is_active=True,
         )
@@ -257,6 +251,8 @@ async def process_bulk_upload(
 
         created.append(StudentListItem(
             id=student.id,
+            first_name=student.first_name,
+            last_name=student.last_name,
             full_name=full_name,
             admission_number=adm_num,
             class_name=class_name,

@@ -7,10 +7,8 @@ create_verification_token(), matching how the router validates it.
 """
 from __future__ import annotations
 
-import io
 from datetime import date
 
-import openpyxl
 import pytest
 from httpx import AsyncClient
 
@@ -222,36 +220,17 @@ async def test_bulk_upload_partial_success(client: AsyncClient) -> None:
     school = await _register_school(client)
     token = school["access_token"]
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Students"
-
-    headers = [
-        "First Name*", "Last Name*", "Middle Name",
-        "Date of Birth* (YYYY-MM-DD)", "Gender* (male/female)",
-        "Admission Number", "Admission Date* (YYYY-MM-DD)",
-        "Class Name", "Address", "State of Origin",
+    rows = [
+        {"first_name": "Tunde", "last_name": "Adeyemi", "date_of_birth": "2012-01-10", "gender": "male", "admission_date": "2023-09-01", "state_of_origin": "Lagos"},
+        {"first_name": "Ngozi", "last_name": "Eze", "middle_name": "Chisom", "date_of_birth": "2013-05-20", "gender": "female", "admission_number": "BULK-002", "admission_date": "2023-09-01", "state_of_origin": "Anambra"},
+        {"first_name": "Musa", "last_name": "Ibrahim", "date_of_birth": "2011-11-30", "gender": "male", "admission_date": "2023-09-01", "address": "Kano Road", "state_of_origin": "Kano"},
+        {"first_name": "", "last_name": "NoName", "date_of_birth": "2012-01-01", "gender": "male", "admission_date": "2023-09-01"},
+        {"first_name": "Valid", "last_name": "Name", "date_of_birth": "2012-01-01", "gender": "unknown_gender", "admission_date": "2023-09-01"},
     ]
-    ws.append(headers)
-
-    # 3 valid rows
-    ws.append(["Tunde", "Adeyemi", "", "2012-01-10", "male", "", "2023-09-01", "", "", "Lagos"])
-    ws.append(["Ngozi", "Eze", "Chisom", "2013-05-20", "female", "BULK-002", "2023-09-01", "", "", "Anambra"])
-    ws.append(["Musa", "Ibrahim", "", "2011-11-30", "male", "", "2023-09-01", "", "Kano Road", "Kano"])
-
-    # Row 5: missing first name (invalid)
-    ws.append(["", "NoName", "", "2012-01-01", "male", "", "2023-09-01", "", "", ""])
-
-    # Row 6: bad gender (invalid)
-    ws.append(["Valid", "Name", "", "2012-01-01", "unknown_gender", "", "2023-09-01", "", "", ""])
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
 
     resp = await client.post(
         "/api/students/bulk-upload",
-        files={"file": ("students.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        json={"rows": rows},
         headers=_auth(token),
     )
     assert resp.status_code == 200, resp.text

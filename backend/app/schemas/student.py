@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -120,6 +120,10 @@ class BulkUploadRow(BaseModel):
     admission_date: date
     class_id: Optional[uuid.UUID] = None
     photo_url: Optional[str] = None
+
+
+class BulkUploadRequest(BaseModel):
+    rows: list[dict[str, Any]] = Field(..., min_length=1, max_length=1000)
 
 
 class BulkUploadErrorRow(BaseModel):

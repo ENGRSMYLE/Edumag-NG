@@ -90,3 +90,15 @@ export interface AttendanceRecord {
   status: 'present' | 'absent' | 'late' | 'excused';
   note?: string;
 }
+
+export interface BulkUploadError {
+  row: number;
+  admission_number: string;
+  reason: string;
+}
+
+export interface BulkUploadResult {
+  success_count: number;
+  error_rows: BulkUploadError[];
+  created_students: StudentListItem[];
+}
