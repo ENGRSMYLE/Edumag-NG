@@ -35,6 +35,7 @@ import type {
   AuditLogParams,
 } from '@/types/dashboard';
 import type { ParentListItem, CreateParentRequest, ParentListParams } from '@/types/parent';
+import type { ParentAssignmentsPage, ParentAttendancePage, ParentChildrenPage, ParentDashboard, ParentFinancePage, ParentProfile, ParentResultsPage } from '@/types/parentPortal';
 import type {
   SchoolAttendanceSummary,
   ClassAttendanceSummary,
@@ -301,6 +302,21 @@ export const parentsApi = {
 
   update: (id: string, data: Partial<Pick<ParentListItem, 'name' | 'address' | 'occupation'>>) =>
     api.patch<ParentListItem>(`/parents/${id}`, data),
+};
+
+export const parentPortalApi = {
+  profile: () => api.get<ParentProfile>('/parents/me'),
+  children: () => api.get<ParentChildrenPage>('/parents/me/children', { params: { page: 1, per_page: 100 } }),
+  dashboard: (studentId?: string) =>
+    api.get<ParentDashboard>('/parents/me/dashboard', {
+      params: studentId ? { student_id: studentId } : undefined,
+    }),
+  attendance: (studentId: string, params?: { page?: number; per_page?: number; start_date?: string; end_date?: string }) =>
+    api.get<ParentAttendancePage>(`/parents/me/children/${studentId}/attendance`, { params }),
+  results: (studentId: string, params?: { academic_session?: string; term?: string; page?: number; per_page?: number }) =>
+    api.get<ParentResultsPage>(`/parents/me/children/${studentId}/results`, { params }),
+  assignments: (studentId: string, params?: { page?: number; per_page?: number }) => api.get<ParentAssignmentsPage>(`/parents/me/children/${studentId}/assignments`, { params }),
+  finance: (studentId: string, params?: { page?: number; per_page?: number }) => api.get<ParentFinancePage>(`/parents/me/children/${studentId}/finance`, { params }),
 };
 
 // ---------------------------------------------------------------------------

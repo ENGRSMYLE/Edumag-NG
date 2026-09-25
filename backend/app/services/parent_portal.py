@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies.parent import ParentContext
 from app.dependencies.rbac import has_permission
 from app.models.assignment import Assignment, AssignmentSubmission
-from app.models.attendance import Attendance
+from app.models.attendance import Attendance, AttendanceStatus
 from app.models.audit_event import AuditEvent
 from app.models.finance import Payment
 from app.models.result import Result
@@ -123,8 +123,16 @@ async def get_child(
     )
 
 
-async def get_dashboard(db: AsyncSession, context: ParentContext) -> ParentDashboardResponse:
-    children = await list_authorized_children(db, context)
+async def get_dashboard(
+    db: AsyncSession,
+    context: ParentContext,
+    student_id: uuid.UUID | None = None,
+) -> ParentDashboardResponse:
+    children = (
+        [await get_authorized_parent_student(db, context, student_id)]
+        if student_id is not None
+        else await list_authorized_children(db, context)
+    )
     summary = await load_parent_dashboard_summary(db, context, children)
     rate = round(summary.present_records / summary.attendance_records * 100, 2) if summary.attendance_records else 0.0
     return ParentDashboardResponse(
@@ -138,10 +146,17 @@ async def get_dashboard(db: AsyncSession, context: ParentContext) -> ParentDashb
     )
 
 
-async def get_attendance_page(db, context, student_id, page, per_page):
+async def get_attendance_page(db, context, student_id, page, per_page, *, start_date=None, end_date=None):
     await get_authorized_parent_student(db, context, student_id, "can_view_attendance")
-    filters = (Attendance.school_id == context.school_id, Attendance.student_id == student_id)
+    filters = [Attendance.school_id == context.school_id, Attendance.student_id == student_id]
+    if start_date:
+        filters.append(Attendance.date >= start_date)
+    if end_date:
+        filters.append(Attendance.date <= end_date)
+    filters = tuple(filters)
     total = (await db.execute(select(func.count(Attendance.id)).where(*filters))).scalar_one()
+    counts = dict((await db.execute(select(Attendance.status, func.count(Attendance.id)).where(*filters).group_by(Attendance.status))).all())
+    present = counts.get(AttendanceStatus.present, 0)
     records = list((await db.execute(
         select(Attendance).where(*filters).order_by(Attendance.date.desc())
         .offset((page - 1) * per_page).limit(per_page)
@@ -149,16 +164,23 @@ async def get_attendance_page(db, context, student_id, page, per_page):
     return PaginatedParentAttendance(
         items=[ParentAttendanceItem(id=r.id, date=r.date, status=r.status.value, note=r.note) for r in records],
         total=total, page=page, per_page=per_page, total_pages=_pages(total, per_page),
+        present_count=present, absent_count=counts.get(AttendanceStatus.absent, 0),
+        late_count=counts.get(AttendanceStatus.late, 0), excused_count=counts.get(AttendanceStatus.excused, 0),
+        attendance_rate=round(present / total * 100, 2) if total else 0.0,
     )
 
 
-async def get_results_page(db, context, student_id, page, per_page):
+async def get_results_page(db, context, student_id, page, per_page, *, academic_session=None, term=None):
     await get_authorized_parent_student(db, context, student_id, "can_view_results")
-    filters = (
+    filters = [
         Result.school_id == context.school_id,
         Result.student_id == student_id,
         Result.is_approved.is_(True),
-    )
+    ]
+    if academic_session:
+        filters.append(Result.academic_session == academic_session)
+    if term:
+        filters.append(Result.term == term)
     total = (await db.execute(select(func.count(Result.id)).where(*filters))).scalar_one()
     records = list((await db.execute(
         select(Result).where(*filters)

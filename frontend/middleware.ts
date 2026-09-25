@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRoleHome, isRouteInRoleSection } from '@/lib/roleRouting';
 
 const PUBLIC_ROUTES = ['/login', '/signup', '/set-password', '/select-school'];
 const LANDING_ROUTE = '/';
-
-const ROLE_HOME: Record<string, string> = {
-  super_admin: '/dashboard/super-admin',
-  admin: '/dashboard/admin',
-  teacher: '/dashboard/staff',
-  parent: '/dashboard/parent',
-};
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -21,8 +15,10 @@ export function middleware(request: NextRequest) {
   // store after login and renewed after a successful silent token refresh.
   // The real credentials remain in the API domain's httpOnly cookies.
   const role = request.cookies.get('_auth_role')?.value ?? null;
-  const isAuthenticated = !!role;
-  const roleHome = role ? ROLE_HOME[role] : null;
+  const roleHome = getRoleHome(role);
+  // Treat unknown/tampered routing hints as unauthenticated. Authorization is
+  // still enforced by the API; this only controls the initial route decision.
+  const isAuthenticated = !!roleHome;
 
   // Not authenticated: protect dashboard routes
   if (!isAuthenticated) {
@@ -38,7 +34,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Dashboard access: ensure user only visits their own role's section
-  if (isDashboard && roleHome && !pathname.startsWith(roleHome)) {
+  if (isDashboard && roleHome && !isRouteInRoleSection(pathname, roleHome)) {
     return NextResponse.redirect(new URL(roleHome, request.url));
   }
 

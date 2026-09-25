@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,10 +69,11 @@ async def child(
 
 @router.get("/dashboard", response_model=ParentDashboardResponse)
 async def dashboard(
+    student_id: uuid.UUID | None = Query(default=None),
     context: ParentContext = Depends(get_current_parent_context),
     db: AsyncSession = Depends(get_db),
 ) -> ParentDashboardResponse:
-    return await get_dashboard(db, context)
+    return await get_dashboard(db, context, student_id)
 
 
 def _pagination(page: int = Query(1, ge=1), per_page: int = Query(20, ge=1, le=100)):
@@ -82,20 +84,24 @@ def _pagination(page: int = Query(1, ge=1), per_page: int = Query(20, ge=1, le=1
 async def attendance(
     student_id: uuid.UUID,
     pagination: tuple[int, int] = Depends(_pagination),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     context: ParentContext = Depends(get_current_parent_context),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_attendance_page(db, context, student_id, *pagination)
+    return await get_attendance_page(db, context, student_id, *pagination, start_date=start_date, end_date=end_date)
 
 
 @router.get("/children/{student_id}/results", response_model=PaginatedParentResults)
 async def results(
     student_id: uuid.UUID,
     pagination: tuple[int, int] = Depends(_pagination),
+    academic_session: str | None = Query(default=None, max_length=20),
+    term: str | None = Query(default=None, pattern="^(first|second|third)$"),
     context: ParentContext = Depends(get_current_parent_context),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_results_page(db, context, student_id, *pagination)
+    return await get_results_page(db, context, student_id, *pagination, academic_session=academic_session, term=term)
 
 
 @router.get("/children/{student_id}/assignments", response_model=PaginatedParentAssignments)

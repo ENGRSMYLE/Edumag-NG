@@ -149,6 +149,10 @@ async def list_announcements(
                 TargetAudience.teacher,
             ])
         )
+    elif role == MembershipRole.parent.value:
+        # Parents receive school-wide notices only. Role-specific staff notices
+        # must never leak through this shared endpoint.
+        q = q.where(Announcement.target_audience == TargetAudience.all)
 
     if target_audience:
         q = q.where(Announcement.target_audience == target_audience)

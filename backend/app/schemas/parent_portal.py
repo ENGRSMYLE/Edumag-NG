@@ -121,6 +121,11 @@ class _Page(BaseModel):
 
 class PaginatedParentAttendance(_Page):
     items: list[ParentAttendanceItem]
+    present_count: int
+    absent_count: int
+    late_count: int
+    excused_count: int
+    attendance_rate: float
 
 
 class PaginatedParentResults(_Page):

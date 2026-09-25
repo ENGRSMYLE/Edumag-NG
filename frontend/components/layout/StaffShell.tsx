@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import { useAuth } from '@/hooks/useAuth';
 import { StaffSidebar } from './StaffSidebar';
 import { DashboardHeader } from './DashboardHeader';
+import { getRoleHome } from '@/lib/roleRouting';
 
 interface StaffShellProps {
   children: ReactNode;
@@ -25,8 +26,9 @@ export function StaffShell({ children }: StaffShellProps) {
       router.replace('/login');
       return;
     }
-    if (role === 'super_admin') { router.replace('/dashboard/super-admin'); return; }
-    if (role === 'admin') { router.replace('/dashboard/admin'); return; }
+    if (role !== 'teacher') {
+      router.replace(getRoleHome(role) ?? '/login');
+    }
   }, [hasHydrated, isAuthenticated, role, isLoading, router]);
 
   useEffect(() => {

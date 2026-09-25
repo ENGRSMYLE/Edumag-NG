@@ -16,13 +16,7 @@ import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { SchoolSwitchOverlay } from '@/components/shared/SchoolSwitchOverlay';
 import type { SchoolOption, UserRole } from '@/types/auth';
-
-const ROLE_HOME: Record<UserRole, string> = {
-  super_admin: '/dashboard/super-admin',
-  admin: '/dashboard/admin',
-  teacher: '/dashboard/staff',
-  parent: '/dashboard/parent',
-};
+import { ROLE_HOME } from '@/lib/roleRouting';
 
 const ROUTE_LABELS: Record<string, string> = {
   '/dashboard/super-admin': 'Dashboard',
@@ -33,6 +27,14 @@ const ROUTE_LABELS: Record<string, string> = {
   '/dashboard/super-admin/announcements': 'Announcements',
   '/dashboard/super-admin/settings': 'Settings',
   '/dashboard/super-admin/settings/logs': 'System Logs',
+  '/dashboard/parent': 'Parent Dashboard',
+  '/dashboard/parent/children': 'My Children',
+  '/dashboard/parent/attendance': 'Attendance',
+  '/dashboard/parent/results': 'Results',
+  '/dashboard/parent/assignments': 'Assignments',
+  '/dashboard/parent/finance': 'Finance',
+  '/dashboard/parent/communication': 'Communication',
+  '/dashboard/parent/profile': 'My Profile',
 };
 
 function getPageLabel(pathname: string): string {

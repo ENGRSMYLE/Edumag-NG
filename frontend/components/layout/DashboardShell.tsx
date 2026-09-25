@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import { useAuth } from '@/hooks/useAuth';
 import { SuperAdminSidebar } from './SuperAdminSidebar';
 import { DashboardHeader } from './DashboardHeader';
+import { getRoleHome } from '@/lib/roleRouting';
 
 interface DashboardShellProps {
   children: ReactNode;
@@ -25,8 +26,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
       router.replace('/login');
       return;
     }
-    if (role === 'admin') { router.replace('/dashboard/admin'); return; }
-    if (role === 'teacher') { router.replace('/dashboard/staff'); return; }
+    if (role !== 'super_admin') {
+      router.replace(getRoleHome(role) ?? '/login');
+    }
   }, [hasHydrated, isAuthenticated, role, isLoading, router]);
 
   useEffect(() => {

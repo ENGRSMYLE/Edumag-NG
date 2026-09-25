@@ -15,6 +15,7 @@ from app.models.result import Result, ResultTerm
 from app.models.student import Gender, Student
 from app.schemas.parent_portal import ParentProfileUpdate
 from app.services.parent_portal import (
+    get_assignments_page,
     get_attendance_page,
     get_children_page,
     get_dashboard,
@@ -125,13 +126,20 @@ async def test_child_permissions_published_results_and_pagination(client, test_e
         context, students, _, _, _ = await _seed_portal_data(db)
         attendance = await get_attendance_page(db, context, students[0].id, 1, 1)
         assert attendance.total == 2 and attendance.total_pages == 2
+        assert attendance.present_count == 1 and attendance.absent_count == 1
+        assert attendance.attendance_rate == 50
+        filtered = await get_attendance_page(db, context, students[0].id, 1, 20, start_date=date(2026, 1, 11), end_date=date(2026, 1, 11))
+        assert filtered.total == 1 and filtered.absent_count == 1
 
         results = await get_results_page(db, context, students[0].id, 1, 20)
         assert results.total == 1
         assert results.items[0].subject == "Math"
+        assert (await get_results_page(db, context, students[0].id, 1, 20, term="second")).total == 0
 
         finance = await get_finance_page(db, context, students[1].id, 1, 20)
         assert finance.total == 1
+        assignments = await get_assignments_page(db, context, students[0].id, 1, 20)
+        assert assignments.total == 1 and assignments.items[0].submitted_at is None
         with pytest.raises(HTTPException) as exc:
             await get_finance_page(db, context, students[0].id, 1, 20)
         assert exc.value.status_code == 404
@@ -159,3 +167,22 @@ async def test_dashboard_query_count_is_bounded_by_dataset_not_child_count(clien
         assert dashboard.child_count == 2
         assert dashboard.approved_results == 1
         assert statements <= 7
+
+
+@pytest.mark.asyncio
+async def test_dashboard_can_be_scoped_to_one_authorized_child(client, test_engine) -> None:
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as db:
+        context, students, _, _, _ = await _seed_portal_data(db)
+
+        first = await get_dashboard(db, context, students[0].id)
+        second = await get_dashboard(db, context, students[1].id)
+
+        assert first.child_count == 1
+        assert first.children[0].id == students[0].id
+        assert first.attendance_rate == 50
+        assert first.approved_results == 1
+        assert second.child_count == 1
+        assert second.children[0].id == students[1].id
+        assert second.attendance_records == 0
+        assert second.approved_results == 0
