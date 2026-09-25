@@ -11,9 +11,10 @@ from app.config import settings
 from app.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.email_verification import EmailVerification
+from app.models.guardian import GuardianProfile, GuardianStatus
 from app.models.refresh_token import RefreshToken
 from app.models.school import School
-from app.models.school_membership import SchoolMembership
+from app.models.school_membership import MembershipRole, SchoolMembership
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
@@ -931,6 +932,16 @@ async def set_password(
     membership.is_active = True
     membership.invite_token = None
     membership.invite_token_expires = None
+    if membership.role == MembershipRole.parent:
+        guardian_profile = (await db.execute(
+            select(GuardianProfile).where(GuardianProfile.membership_id == membership.id)
+        )).scalar_one_or_none()
+        if guardian_profile is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Parent account is missing its guardian profile",
+            )
+        guardian_profile.status = GuardianStatus.active
 
     token_payload = _token_payload(user, membership)
     access_token = create_access_token(token_payload)

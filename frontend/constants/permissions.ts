@@ -22,6 +22,23 @@ export const PERMISSIONS = {
   VIEW_PARENT_CONTACT:           'view_parent_contact',
   MESSAGE_PARENTS_FULL:          'message_parents_full',
   MESSAGE_PARENTS_LIMITED:       'message_parents_limited',
+  VIEW_OWN_CHILDREN:             'view_own_children',
+  VIEW_CHILD_ATTENDANCE:         'view_child_attendance',
+  VIEW_CHILD_RESULTS:            'view_child_results',
+  VIEW_CHILD_ASSIGNMENTS:        'view_child_assignments',
+  VIEW_CHILD_FINANCE:            'view_child_finance',
+  VIEW_PARENT_ANNOUNCEMENTS:     'view_parent_announcements',
+  MESSAGE_RELATED_TEACHER:       'message_related_teacher',
+  MANAGE_OWN_PROFILE:            'manage_own_profile',
+  CREATE_PARENT_ACCOUNT:         'create_parent_account',
+  VIEW_PARENT_ACCOUNTS:          'view_parent_accounts',
+  EDIT_PARENT_ACCOUNT:           'edit_parent_account',
+  DISABLE_PARENT_ACCOUNT:        'disable_parent_account',
+  LINK_GUARDIAN_TO_STUDENT:      'link_guardian_to_student',
+  UNLINK_GUARDIAN_FROM_STUDENT:  'unlink_guardian_from_student',
+  RESEND_PARENT_INVITE:          'resend_parent_invite',
+  MESSAGE_PARENTS:               'message_parents',
+  BROADCAST_TO_PARENTS:          'broadcast_to_parents',
 
   // Classes
   CREATE_CLASS:                  'create_class',
@@ -76,9 +93,17 @@ export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 export type UserRole = 'super_admin' | 'admin' | 'teacher' | 'parent';
 
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  // Parent portal permissions are intentionally added in Phase 3. Until then,
-  // the role is recognized but grants no application permissions.
-  parent: [],
+  parent: [
+    PERMISSIONS.VIEW_OWN_CHILDREN,
+    PERMISSIONS.VIEW_CHILD_ATTENDANCE,
+    PERMISSIONS.VIEW_CHILD_RESULTS,
+    PERMISSIONS.VIEW_CHILD_ASSIGNMENTS,
+    PERMISSIONS.VIEW_CHILD_FINANCE,
+    PERMISSIONS.VIEW_PARENT_ANNOUNCEMENTS,
+    PERMISSIONS.MESSAGE_ADMIN,
+    PERMISSIONS.MESSAGE_RELATED_TEACHER,
+    PERMISSIONS.MANAGE_OWN_PROFILE,
+  ],
   teacher: [
     PERMISSIONS.VIEW_OWN_CLASS_STUDENTS,
     PERMISSIONS.ASSIGN_STUDENT_TO_CLASS,
@@ -130,6 +155,15 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.MESSAGE_TEACHERS,
     PERMISSIONS.MESSAGE_ADMIN,
     PERMISSIONS.BACKUP_EXPORT_DATA,
+    PERMISSIONS.CREATE_PARENT_ACCOUNT,
+    PERMISSIONS.VIEW_PARENT_ACCOUNTS,
+    PERMISSIONS.EDIT_PARENT_ACCOUNT,
+    PERMISSIONS.DISABLE_PARENT_ACCOUNT,
+    PERMISSIONS.LINK_GUARDIAN_TO_STUDENT,
+    PERMISSIONS.UNLINK_GUARDIAN_FROM_STUDENT,
+    PERMISSIONS.RESEND_PARENT_INVITE,
+    PERMISSIONS.MESSAGE_PARENTS,
+    PERMISSIONS.BROADCAST_TO_PARENTS,
   ],
 
   // super_admin inherits every permission

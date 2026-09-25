@@ -10,6 +10,17 @@ from app.models.user import User
 # Permission map
 # ---------------------------------------------------------------------------
 ROLE_PERMISSIONS: dict[str, list[str]] = {
+    "parent": [
+        "view_own_children",
+        "view_child_attendance",
+        "view_child_results",
+        "view_child_assignments",
+        "view_child_finance",
+        "view_parent_announcements",
+        "message_admin",
+        "message_related_teacher",
+        "manage_own_profile",
+    ],
     "teacher": [
         "view_own_class_students",
         "assign_student_to_class",
@@ -62,13 +73,22 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "message_teachers",
         "message_admin",
         "backup_export_data",
+        "create_parent_account",
+        "view_parent_accounts",
+        "edit_parent_account",
+        "disable_parent_account",
+        "link_guardian_to_student",
+        "unlink_guardian_from_student",
+        "resend_parent_invite",
+        "message_parents",
+        "broadcast_to_parents",
     ],
     # super_admin has a wildcard — checked below
     "super_admin": ["*"],
 }
 
 
-def _has_permission(role: str, permission: str) -> bool:
+def has_permission(role: str, permission: str) -> bool:
     perms = ROLE_PERMISSIONS.get(role, [])
     return "*" in perms or permission in perms
 
@@ -90,7 +110,7 @@ def require_permission(permission: str) -> Callable:
                 },
             )
         role_value = current_user.current_role.value  # type: ignore[attr-defined]
-        if not _has_permission(role_value, permission):
+        if not has_permission(role_value, permission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions",
@@ -114,7 +134,7 @@ def require_any_permission(*permissions: str) -> Callable:
                 },
             )
         role_value = current_user.current_role.value  # type: ignore[attr-defined]
-        if not any(_has_permission(role_value, perm) for perm in permissions):
+        if not any(has_permission(role_value, perm) for perm in permissions):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions",

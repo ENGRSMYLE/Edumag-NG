@@ -4,6 +4,7 @@ from app.models.school_membership import SchoolMembership
 from app.models.student import Student
 from app.models.parent import Parent
 from app.models.guardian import GuardianProfile, StudentGuardian
+from app.models.audit_event import AuditEvent
 from app.models.class_ import Class
 from app.models.attendance import Attendance
 from app.models.result import Result

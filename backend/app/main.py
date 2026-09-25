@@ -32,6 +32,7 @@ from app.routers import assignments as assignments_router
 from app.routers import communication as communication_router
 from app.routers import dashboard as dashboard_router
 from app.routers import settings as settings_router
+from app.routers import guardians as guardians_router
 from app.utils.rate_limit import limiter  # single shared limiter instance
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,7 @@ app.include_router(assignments_router.router, prefix="/api")
 app.include_router(communication_router.router, prefix="/api")
 app.include_router(dashboard_router.router, prefix="/api")
 app.include_router(settings_router.router, prefix="/api")
+app.include_router(guardians_router.router, prefix="/api")
 
 # ---------------------------------------------------------------------------
 # Health check
@@ -119,4 +121,3 @@ async def on_startup() -> None:
     logger.info(
         "EduMag NG API starting — environment=%s", settings.ENVIRONMENT
     )
-
