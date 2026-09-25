@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +14,7 @@ from app.models.audit_event import AuditEvent
 from app.models.guardian import GuardianProfile, GuardianStatus, StudentGuardian
 from app.models.school import School
 from app.models.school_membership import MembershipRole, SchoolMembership
+from app.models.refresh_token import RefreshToken
 from app.models.student import Student
 from app.models.user import User
 from app.schemas.guardian import GuardianInviteRequest, GuardianSearchItem
@@ -38,6 +40,81 @@ class GuardianInviteResult:
     relationship: StudentGuardian
     invitation_created: bool
     email_task: GuardianEmailTask | None
+
+
+async def _get_guardian_account(
+    db: AsyncSession, school_id: uuid.UUID, profile_id: uuid.UUID
+) -> tuple[GuardianProfile, SchoolMembership, User, School]:
+    row = (await db.execute(
+        select(GuardianProfile, SchoolMembership, User, School)
+        .join(SchoolMembership, SchoolMembership.id == GuardianProfile.membership_id)
+        .join(User, User.id == SchoolMembership.user_id)
+        .join(School, School.id == GuardianProfile.school_id)
+        .where(GuardianProfile.id == profile_id, GuardianProfile.school_id == school_id)
+    )).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guardian not found")
+    return row
+
+
+async def disable_guardian_account(
+    db: AsyncSession, *, school_id: uuid.UUID, actor_user_id: uuid.UUID, profile_id: uuid.UUID
+) -> None:
+    profile, membership, _, _ = await _get_guardian_account(db, school_id, profile_id)
+    profile.status = GuardianStatus.disabled
+    membership.is_active = False
+    membership.invite_token = None
+    membership.invite_token_expires = None
+    await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.membership_id == membership.id, RefreshToken.revoked.is_(False))
+        .values(revoked=True)
+    )
+    db.add(_audit(school_id, actor_user_id, "parent_account_disabled", "guardian_profile", profile.id))
+    await db.commit()
+
+
+async def reactivate_guardian_account(
+    db: AsyncSession, *, school_id: uuid.UUID, actor_user_id: uuid.UUID, profile_id: uuid.UUID
+) -> None:
+    profile, membership, user, _ = await _get_guardian_account(db, school_id, profile_id)
+    if not user.is_active:
+        raise _conflict("The global account is disabled and requires administrator review")
+    if profile.status != GuardianStatus.disabled:
+        raise _conflict("Guardian account is not disabled")
+    profile.status = GuardianStatus.active
+    membership.is_active = True
+    db.add(_audit(school_id, actor_user_id, "parent_account_reactivated", "guardian_profile", profile.id))
+    await db.commit()
+
+
+async def resend_guardian_invitation(
+    db: AsyncSession, *, school_id: uuid.UUID, actor_user_id: uuid.UUID, profile_id: uuid.UUID
+) -> GuardianEmailTask:
+    profile, membership, user, school = await _get_guardian_account(db, school_id, profile_id)
+    if membership.is_active or profile.status == GuardianStatus.active:
+        raise _conflict("Guardian account is already active")
+    if profile.status in {GuardianStatus.disabled, GuardianStatus.suspended} or not user.is_active:
+        raise _conflict("Guardian account requires administrator review")
+
+    now = datetime.now(timezone.utc)
+    raw_token = create_invite_token(str(membership.id))
+    membership.invite_token = raw_token
+    membership.invite_token_expires = now + timedelta(hours=settings.INVITE_TOKEN_EXPIRE_HOURS)
+    temp_password = None
+    if user.is_first_login:
+        temp_password = generate_temp_password()
+        user.password_hash = hash_password(temp_password)
+    db.add(_audit(school_id, actor_user_id, "parent_invitation_resent", "school_membership", membership.id))
+    await db.commit()
+    return GuardianEmailTask(
+        kind="new_account" if user.is_first_login else "school_linked",
+        to_email=user.email,
+        to_name=user.name,
+        school_name=school.name,
+        invite_link=f"{settings.FRONTEND_URL}/set-password?token={raw_token}",
+        temp_password=temp_password,
+    )
 
 
 def _conflict(detail: str) -> HTTPException:

@@ -11,6 +11,7 @@ from app.config import settings
 from app.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.email_verification import EmailVerification
+from app.models.audit_event import AuditEvent
 from app.models.guardian import GuardianProfile, GuardianStatus
 from app.models.refresh_token import RefreshToken
 from app.models.school import School
@@ -30,8 +31,11 @@ from app.schemas.auth import (
     UserInToken,
     VerifyOTPRequest,
     VerifyOTPResponse,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
 )
-from app.services.email_service import send_otp_email, send_welcome_email
+from app.services.email_service import send_otp_email, send_password_reset_email, send_welcome_email
+from app.services.password_recovery import request_password_reset, reset_password as perform_password_reset
 from app.utils.rate_limit import limiter
 from app.utils.security import (
     create_access_token,
@@ -166,6 +170,39 @@ async def _revoke_membership_tokens(
         )
         .values(revoked=True)
     )
+
+
+@router.post("/forgot-password")
+@limiter.limit("10/hour")
+async def forgot_password(
+    request: Request,
+    body: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    requester_ip = request.client.host if request.client else "unknown"
+    task = await request_password_reset(
+        db, email=str(body.email), requester_ip=requester_ip
+    )
+    if task:
+        background_tasks.add_task(
+            send_password_reset_email,
+            to_email=task.to_email,
+            to_name=task.to_name,
+            reset_link=task.reset_link,
+        )
+    return {"message": "If an account exists for that email, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+@limiter.limit("10/hour")
+async def reset_password(
+    request: Request,
+    body: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    await perform_password_reset(db, raw_token=body.token, new_password=body.new_password)
+    return {"message": "Password reset successfully. Please sign in again."}
 
 
 # ---------------------------------------------------------------------------
@@ -482,6 +519,12 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Account deactivated",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled",
         )
 
     memberships_result = await db.execute(
@@ -924,6 +967,11 @@ async def set_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid invite token",
         )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled",
+        )
 
     if user.is_first_login:
         user.password_hash = hash_password(body.new_password)
@@ -942,6 +990,16 @@ async def set_password(
                 detail="Parent account is missing its guardian profile",
             )
         guardian_profile.status = GuardianStatus.active
+
+    await _revoke_membership_tokens(db, membership.id)
+    db.add(AuditEvent(
+        school_id=membership.school_id,
+        actor_user_id=user.id,
+        event_type="parent_account_activated" if membership.role == MembershipRole.parent else "account_activated",
+        target_type="school_membership",
+        target_id=membership.id,
+        event_data={"role": _role_str(membership.role)},
+    ))
 
     token_payload = _token_payload(user, membership)
     access_token = create_access_token(token_payload)

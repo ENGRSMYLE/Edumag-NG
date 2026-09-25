@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     INVITE_TOKEN_EXPIRE_HOURS: int = 48
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Email
     RESEND_API_KEY: str

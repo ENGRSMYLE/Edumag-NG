@@ -164,6 +164,35 @@ async def send_school_linked_email(
         logger.exception("Failed to send school-linked email to %s", to_email)
 
 
+async def send_password_reset_email(to_email: str, to_name: str, reset_link: str) -> None:
+    body_html = f"""
+      <p>Hello <strong>{to_name}</strong>,</p>
+      <p>We received a request to reset your EduMag NG password.</p>
+      <p style="text-align:center;margin:32px 0;">
+        <a href="{reset_link}"
+           style="background:{_BRAND_COLOR};color:#ffffff;text-decoration:none;
+                  padding:14px 32px;border-radius:6px;font-size:15px;
+                  font-weight:bold;display:inline-block;">Reset Password</a>
+      </p>
+      <p style="font-size:13px;color:#6b7280;">
+        This single-use link expires in {settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES} minutes.
+        If you did not request a password reset, you can safely ignore this email.
+      </p>
+    """
+    payload = {
+        "from": f"EduMag NG <{settings.FROM_EMAIL}>",
+        "to": [to_email],
+        "subject": "Reset your EduMag NG password",
+        "html": _base_html("Reset your password", body_html),
+    }
+    try:
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, lambda: resend.Emails.send(payload))
+        logger.info("Password reset email sent to %s (id=%s)", to_email, _get_id(result))
+    except Exception:
+        logger.exception("Failed to send password reset email to %s", to_email)
+
+
 async def send_otp_email(to_email: str, otp: str, school_name: str) -> None:
     logger.info("Sending OTP email to %s for school '%s'", to_email, school_name)
     body_html = f"""
