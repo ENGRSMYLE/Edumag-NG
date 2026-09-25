@@ -513,9 +513,17 @@ async def login(
         raise _invalid
 
     if not verify_password(body.password, user.password_hash):
+        failed_memberships = list((await db.execute(select(SchoolMembership).where(SchoolMembership.user_id == user.id))).scalars().all())
+        for item in failed_memberships:
+            db.add(AuditEvent(school_id=item.school_id, actor_user_id=user.id, event_type="login_failed", target_type="user", target_id=user.id, event_data={"reason": "invalid_credentials", "request_ip": request.client.host if request.client else None}))
+        await db.commit()
         raise _invalid
 
     if not user.is_active:
+        inactive_memberships = list((await db.execute(select(SchoolMembership).where(SchoolMembership.user_id == user.id))).scalars().all())
+        for item in inactive_memberships:
+            db.add(AuditEvent(school_id=item.school_id, actor_user_id=user.id, event_type="login_failed", target_type="user", target_id=user.id, event_data={"reason": "account_deactivated", "request_ip": request.client.host if request.client else None}))
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Account deactivated",
@@ -554,6 +562,7 @@ async def login(
         access_token = create_access_token(payload)
         refresh_token = create_refresh_token(payload)
         await _store_refresh_token(db, user.id, membership.id, refresh_token)
+        db.add(AuditEvent(school_id=membership.school_id, actor_user_id=user.id, event_type="login_succeeded", target_type="school_membership", target_id=membership.id, event_data={"role": _role_str(membership.role), "request_ip": request.client.host if request.client else None}))
         await db.commit()
 
         school_name = membership.school.name if membership.school else ""
@@ -851,6 +860,7 @@ async def logout(
     await _revoke_membership_tokens(
         db, current_user.current_membership_id  # type: ignore[attr-defined]
     )
+    db.add(AuditEvent(school_id=current_user.current_school_id, actor_user_id=current_user.id, event_type="logout", target_type="school_membership", target_id=current_user.current_membership_id, event_data={"request_ip": request.client.host if request.client else None}))  # type: ignore[attr-defined]
     await db.commit()
     _clear_auth_cookies(response)
     return {"message": "Logged out successfully"}

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.audit_event import AuditEvent
 from app.dependencies.parent import ParentContext, get_current_parent_context
 from app.schemas.parent_portal import (
     PaginatedParentAssignments,
@@ -30,6 +31,10 @@ from app.services.parent_portal import (
 )
 
 router = APIRouter(prefix="/parents/me", tags=["parent portal"])
+
+async def _audit_child_view(db: AsyncSession, context: ParentContext, student_id: uuid.UUID, category: str) -> None:
+    db.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user.id, event_type="sensitive_child_data_viewed", target_type="student", target_id=student_id, event_data={"category": category}))
+    await db.commit()
 
 
 @router.get("", response_model=ParentProfileResponse)
@@ -89,7 +94,9 @@ async def attendance(
     context: ParentContext = Depends(get_current_parent_context),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_attendance_page(db, context, student_id, *pagination, start_date=start_date, end_date=end_date)
+    response = await get_attendance_page(db, context, student_id, *pagination, start_date=start_date, end_date=end_date)
+    await _audit_child_view(db, context, student_id, "attendance")
+    return response
 
 
 @router.get("/children/{student_id}/results", response_model=PaginatedParentResults)
@@ -101,7 +108,9 @@ async def results(
     context: ParentContext = Depends(get_current_parent_context),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_results_page(db, context, student_id, *pagination, academic_session=academic_session, term=term)
+    response = await get_results_page(db, context, student_id, *pagination, academic_session=academic_session, term=term)
+    await _audit_child_view(db, context, student_id, "results")
+    return response
 
 
 @router.get("/children/{student_id}/assignments", response_model=PaginatedParentAssignments)
@@ -111,7 +120,9 @@ async def assignments(
     context: ParentContext = Depends(get_current_parent_context),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_assignments_page(db, context, student_id, *pagination)
+    response = await get_assignments_page(db, context, student_id, *pagination)
+    await _audit_child_view(db, context, student_id, "assignments")
+    return response
 
 
 @router.get("/children/{student_id}/finance", response_model=PaginatedParentFinance)
@@ -121,4 +132,6 @@ async def finance(
     context: ParentContext = Depends(get_current_parent_context),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_finance_page(db, context, student_id, *pagination)
+    response = await get_finance_page(db, context, student_id, *pagination)
+    await _audit_child_view(db, context, student_id, "finance")
+    return response

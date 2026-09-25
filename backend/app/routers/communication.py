@@ -202,7 +202,7 @@ async def list_recipients(
     role = current_user.current_role.value  # type: ignore[attr-defined]
 
     # Determine which roles this user can send messages to
-    if role == "teacher":
+    if role in {"teacher", "parent"}:
         target_roles = [MembershipRole.admin, MembershipRole.super_admin]
     elif role == "admin":
         target_roles = [MembershipRole.teacher, MembershipRole.admin, MembershipRole.super_admin]
@@ -249,8 +249,8 @@ async def send_message(
     if body.recipient_id:
         requested_ids.add(body.recipient_id)
     if body.recipient_group:
-        if role == "teacher":
-            raise HTTPException(status_code=403, detail="Teachers cannot send broadcasts")
+        if role in {"teacher", "parent"}:
+            raise HTTPException(status_code=403, detail="This role cannot send broadcasts")
         group_roles = {
             "all_teachers": [MembershipRole.teacher],
             "all_admins": [MembershipRole.admin, MembershipRole.super_admin],
@@ -275,6 +275,8 @@ async def send_message(
         raise HTTPException(status_code=404, detail="One or more recipients were not found in this school")
     if role == "teacher" and any(m.role not in (MembershipRole.admin, MembershipRole.super_admin) for m in membership_rows):
         raise HTTPException(status_code=403, detail="Teachers can only message admin staff")
+    if role == "parent" and any(m.role not in (MembershipRole.admin, MembershipRole.super_admin) for m in membership_rows):
+        raise HTTPException(status_code=403, detail="Parents can only message admin staff")
 
     thread_id = body.thread_id or uuid.uuid4()
     if body.thread_id:
@@ -301,6 +303,9 @@ async def send_message(
     db.add_all([MessageRecipient(message_id=msg.id, user_id=user_id) for user_id in requested_ids])
     await db.flush()
     await emit_notifications(db, school_id=school_id, user_ids=requested_ids, event_type=DomainEventType.message_received, title=body.subject or "New message", body=body.body[:240], data={"message_id": str(msg.id), "thread_id": str(thread_id)})
+    if body.recipient_group:
+        from app.models.audit_event import AuditEvent
+        db.add(AuditEvent(school_id=school_id, actor_user_id=current_user.id, event_type="broadcast_message_sent", target_type="message", target_id=msg.id, event_data={"recipient_group": body.recipient_group, "recipient_count": len(requested_ids)}))
 
     result = await db.execute(
         select(Message)

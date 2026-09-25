@@ -321,7 +321,9 @@ async def update_student_guardian(
         if changes.get("is_active") is True and not user.is_first_login:
             profile.status = GuardianStatus.active
             membership.is_active = True
-    db.add(_audit(school_id, actor_id, "guardian_relationship_updated", "student_guardian", link.id))
+    permission_fields = {"can_receive_messages", "can_view_attendance", "can_view_results", "can_view_assignments", "can_view_finance", "can_pick_up"}
+    event_type = "guardian_permissions_changed" if permission_fields.intersection(changes) else "guardian_relationship_updated"
+    db.add(_audit(school_id, actor_id, event_type, "student_guardian", link.id, changed_fields=sorted(changes)))
     await db.commit()
     return _relationship_response(link, user)
 

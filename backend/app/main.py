@@ -12,6 +12,7 @@ logging.basicConfig(
 )
 
 import os
+import re
 from fastapi import FastAPI, Request, status, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -60,6 +61,23 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 _cors_origins = [o.strip() for o in settings.FRONTEND_URL.split(",") if o.strip()]
+
+@app.middleware("http")
+async def reject_cross_site_cookie_mutations(request: Request, call_next):
+    """Origin-check unsafe cookie-authenticated browser requests.
+
+    Bearer-token API clients are unaffected. Browsers always attach Origin to
+    cross-site CORS mutations, while same-origin/server clients may omit it.
+    """
+    if request.method not in {"GET", "HEAD", "OPTIONS"} and (
+        request.cookies.get("access_token") or request.cookies.get("refresh_token")
+    ):
+        origin = request.headers.get("origin")
+        if origin:
+            allowed = origin in _cors_origins if settings.is_production else bool(re.fullmatch(r"http://localhost(?::\d+)?", origin))
+            if not allowed:
+                return JSONResponse(status_code=403, content={"detail": "Cross-site request rejected"})
+    return await call_next(request)
 
 # In development allow any localhost port so the Next.js dev server can run on
 # 3000, 3001, etc. without breaking the cookie/CORS flow.
