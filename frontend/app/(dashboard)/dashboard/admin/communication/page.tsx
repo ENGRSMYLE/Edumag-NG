@@ -17,6 +17,7 @@ import {
   Mail,
   Send,
   Inbox,
+  Search,
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -168,12 +169,16 @@ function NewAnnouncementModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
 interface ComposeModalProps {
   recipients: { id: string; name: string; role: string }[];
   prefillRecipientId?: string;
+  threadId?: string;
+  parentMessageId?: string;
   onClose: () => void;
 }
 
-function ComposeModal({ recipients, prefillRecipientId, onClose }: ComposeModalProps) {
+function ComposeModal({ recipients, prefillRecipientId, threadId, parentMessageId, onClose }: ComposeModalProps) {
   const [mounted, setMounted] = useState(false);
-  const [recipientId, setRecipientId] = useState(prefillRecipientId ?? recipients[0]?.id ?? '');
+  const [recipientIds, setRecipientIds] = useState<string[]>(prefillRecipientId ? [prefillRecipientId] : []);
+  const [recipientGroup, setRecipientGroup] = useState<'' | 'all_teachers' | 'all_admins'>('');
+  const [recipientSearch, setRecipientSearch] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const queryClient = useQueryClient();
@@ -185,7 +190,14 @@ function ComposeModal({ recipients, prefillRecipientId, onClose }: ComposeModalP
   }, []);
 
   const { mutate: sendMessage, isPending } = useMutation({
-    mutationFn: () => communicationApi.sendMessage({ recipient_id: recipientId, subject, body }).then((r) => r.data),
+    mutationFn: () => communicationApi.sendMessage({
+      recipient_ids: recipientGroup ? undefined : recipientIds,
+      recipient_group: recipientGroup || undefined,
+      subject,
+      body,
+      thread_id: threadId,
+      parent_message_id: parentMessageId,
+    }).then((r) => r.data),
     onSuccess: () => {
       toast.success('Message sent');
       queryClient.invalidateQueries({ queryKey: ['messages', 'sent'] });
@@ -199,7 +211,7 @@ function ComposeModal({ recipients, prefillRecipientId, onClose }: ComposeModalP
   });
 
   const handleSend = () => {
-    if (!recipientId) { toast.error('Please select a recipient'); return; }
+    if (!recipientGroup && recipientIds.length === 0) { toast.error('Please select at least one recipient'); return; }
     if (!subject.trim()) { toast.error('Please enter a subject'); return; }
     if (!body.trim()) { toast.error('Please write your message'); return; }
     sendMessage();
@@ -230,9 +242,20 @@ function ComposeModal({ recipients, prefillRecipientId, onClose }: ComposeModalP
           <div className="px-6 py-5 flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-[var(--color-text-primary)]">To <span className="text-red-500">*</span></label>
+              <input
+                type="search"
+                value={recipientSearch}
+                onChange={(event) => setRecipientSearch(event.target.value)}
+                placeholder="Search recipients by name or role"
+                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-gold)]"
+              />
               <select
-                value={recipientId}
-                onChange={(e) => setRecipientId(e.target.value)}
+                multiple
+                value={recipientIds}
+                onChange={(e) => {
+                  setRecipientGroup('');
+                  setRecipientIds(Array.from(e.target.selectedOptions, (option) => option.value));
+                }}
                 className={clsx(
                   'w-full text-sm rounded-xl px-3 py-2.5 cursor-pointer',
                   'bg-[var(--color-surface)] border border-[var(--color-border)]',
@@ -241,13 +264,34 @@ function ComposeModal({ recipients, prefillRecipientId, onClose }: ComposeModalP
                   'transition-all duration-200',
                 )}
               >
-                {recipients.length === 0 && <option value="">No recipients available</option>}
-                {recipients.map((r) => (
+                {recipients.filter((recipient) => {
+                  const needle = recipientSearch.toLowerCase();
+                  return recipient.name.toLowerCase().includes(needle) || recipient.role.toLowerCase().includes(needle);
+                }).map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name} ({r.role === 'super_admin' ? 'Super Admin' : r.role === 'admin' ? 'Admin' : 'Teacher'})
                   </option>
                 ))}
               </select>
+              <p className="text-[10px] text-[var(--color-text-muted)]">Hold Ctrl/Cmd to select multiple people.</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {(['all_teachers', 'all_admins'] as const).map((group) => (
+                  <button
+                    key={group}
+                    type="button"
+                    onClick={() => { setRecipientIds([]); setRecipientGroup(group); }}
+                    className={clsx(
+                      'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                      recipientGroup === group
+                        ? 'bg-[var(--color-navy)] text-white border-[var(--color-navy)]'
+                        : 'bg-white text-[var(--color-text-secondary)] border-[var(--color-border)]',
+                    )}
+                  >
+                    {group === 'all_teachers' ? 'All Teachers' : 'All Admins'}
+                  </button>
+                ))}
+              </div>
+              {recipientGroup && <p className="text-xs text-amber-700">This message will be delivered to {recipientGroup === 'all_teachers' ? 'every active teacher' : 'every active administrator'}.</p>}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -291,7 +335,7 @@ function ComposeModal({ recipients, prefillRecipientId, onClose }: ComposeModalP
             <button type="button" onClick={onClose} className={clsx('px-4 py-2 rounded-lg text-sm font-medium cursor-pointer border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-navy)]/30 hover:text-[var(--color-text-primary)] transition-all duration-150')}>
               Cancel
             </button>
-            <button type="button" onClick={handleSend} disabled={isPending || !recipientId} className={clsx('flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer bg-[var(--color-navy)] text-white hover:bg-[var(--color-navy-mid)] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200')}>
+            <button type="button" onClick={handleSend} disabled={isPending || (!recipientGroup && recipientIds.length === 0)} className={clsx('flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer bg-[var(--color-navy)] text-white hover:bg-[var(--color-navy-mid)] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200')}>
               {isPending ? <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Send className="w-3.5 h-3.5" strokeWidth={1.5} />}
               {isPending ? 'Sending…' : 'Send Message'}
             </button>
@@ -340,7 +384,7 @@ function InboxMessageRow({
 }: {
   msg: MessageResponse;
   onMarkRead: (id: string) => void;
-  onReply: (senderId: string) => void;
+  onReply: (message: MessageResponse) => void;
 }) {
   return (
     <div
@@ -363,7 +407,7 @@ function InboxMessageRow({
             <time className="text-[11px] text-[var(--color-text-muted)]">{formatRelativeTime(msg.created_at)}</time>
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onReply(msg.sender_id); }}
+              onClick={(e) => { e.stopPropagation(); onReply(msg); }}
               className="sm:opacity-0 sm:group-hover:opacity-100 text-[10px] font-medium text-[var(--color-navy)] hover:underline transition-opacity duration-150 cursor-pointer"
             >
               Reply
@@ -417,38 +461,40 @@ export default function AdminCommunicationPage() {
   const [msgTab, setMsgTab] = useState<MsgTab>('inbox');
   const [annModalOpen, setAnnModalOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [replyToId, setReplyToId] = useState<string | undefined>(undefined);
+  const [replyTo, setReplyTo] = useState<MessageResponse | undefined>(undefined);
+  const [messageSearch, setMessageSearch] = useState('');
 
   const { data: announcementsData, isLoading: announcementsLoading } = useAnnouncements({ per_page: 50 });
-  const { data: inboxData, isLoading: inboxLoading } = useInbox({ per_page: 50 });
+  const { data: inboxData, isLoading: inboxLoading } = useInbox({ per_page: 50, search: messageSearch || undefined });
   const markRead = useMarkRead();
 
   const { data: sentData, isLoading: sentLoading } = useQuery({
-    queryKey: ['messages', 'sent'],
-    queryFn: () => communicationApi.getSent({ per_page: 50 }).then((r) => r.data),
+    queryKey: ['messages', 'sent', messageSearch],
+    queryFn: () => communicationApi.getSent({ per_page: 50, search: messageSearch || undefined }).then((r) => r.data),
     staleTime: 30_000,
     retry: 1,
   });
 
-  const { data: recipients = [] } = useQuery({
+  const { data: recipientsPage } = useQuery({
     queryKey: ['communication-recipients'],
-    queryFn: () => communicationApi.getRecipients().then((r) => r.data),
+    queryFn: () => communicationApi.getRecipients({ per_page: 100 }).then((r) => r.data),
     staleTime: 300_000,
   });
+  const recipients = recipientsPage?.items ?? [];
 
   const announcements = announcementsData?.items ?? [];
   const inboxMessages = inboxData?.items ?? [];
   const sentMessages = sentData?.items ?? [];
   const unreadCount = inboxData?.unread_count ?? 0;
 
-  const handleReply = (senderId: string) => {
-    setReplyToId(senderId);
+  const handleReply = (message: MessageResponse) => {
+    setReplyTo(message);
     setComposeOpen(true);
   };
 
   const handleComposeClose = () => {
     setComposeOpen(false);
-    setReplyToId(undefined);
+    setReplyTo(undefined);
   };
 
   const tabCls = (active: boolean) => clsx(
@@ -487,7 +533,7 @@ export default function AdminCommunicationPage() {
             </button>
           ) : (
             <button
-              onClick={() => { setReplyToId(undefined); setComposeOpen(true); }}
+              onClick={() => { setReplyTo(undefined); setComposeOpen(true); }}
               disabled={recipients.length === 0}
               className={clsx(
                 'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer',
@@ -595,6 +641,19 @@ export default function AdminCommunicationPage() {
                 </button>
               </div>
 
+              <div className="px-4 py-3 border-b border-[var(--color-border)]">
+                <label className="relative block">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]" strokeWidth={1.5} />
+                  <input
+                    type="search"
+                    value={messageSearch}
+                    onChange={(event) => setMessageSearch(event.target.value)}
+                    placeholder="Search sender, subject, or message"
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[var(--color-gold)]"
+                  />
+                </label>
+              </div>
+
               {/* Inbox */}
               {msgTab === 'inbox' && (
                 inboxLoading ? (
@@ -675,7 +734,9 @@ export default function AdminCommunicationPage() {
       {composeOpen && (
         <ComposeModal
           recipients={recipients}
-          prefillRecipientId={replyToId}
+          prefillRecipientId={replyTo?.sender_id}
+          threadId={replyTo?.thread_id}
+          parentMessageId={replyTo?.id}
           onClose={handleComposeClose}
         />
       )}

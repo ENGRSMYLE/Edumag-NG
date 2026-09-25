@@ -45,20 +45,32 @@ class PaginatedAnnouncementResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 class SendMessageRequest(BaseModel):
-    recipient_id: uuid.UUID
+    recipient_id: Optional[uuid.UUID] = None
+    recipient_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
+    recipient_group: Optional[str] = Field(None, pattern="^(all_teachers|all_admins)$")
     subject: Optional[str] = Field(None, max_length=255)
     body: str = Field(..., min_length=1)
+    thread_id: Optional[uuid.UUID] = None
+    parent_message_id: Optional[uuid.UUID] = None
+
+
+class MessageRecipientResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    role: str
 
 
 class MessageResponse(BaseModel):
     id: uuid.UUID
     sender_id: uuid.UUID
     sender_name: str
-    recipient_id: uuid.UUID
+    recipient_id: Optional[uuid.UUID]
     recipient_name: str
+    recipients: list[MessageRecipientResponse]
     subject: Optional[str]
     body: str
     is_read: bool
+    thread_id: uuid.UUID
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -87,3 +99,15 @@ class RecipientResponse(BaseModel):
     id: uuid.UUID
     name: str
     role: str
+
+
+class PaginatedRecipientResponse(BaseModel):
+    total: int
+    page: int
+    per_page: int
+    items: list[RecipientResponse]
+
+
+class ThreadResponse(BaseModel):
+    thread_id: uuid.UUID
+    items: list[MessageResponse]

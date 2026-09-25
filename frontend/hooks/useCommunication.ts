@@ -18,7 +18,7 @@ export function useCreateAnnouncement() {
   });
 }
 
-export function useInbox(params?: { page?: number; per_page?: number; is_read?: boolean }) {
+export function useInbox(params?: { page?: number; per_page?: number; is_read?: boolean; search?: string }) {
   return useQuery({
     queryKey: ['inbox', params],
     queryFn: () => communicationApi.getInbox(params).then((r) => r.data),
@@ -40,6 +40,7 @@ export function useSendMessage() {
       communicationApi.sendMessage(data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inbox'] });
+      qc.invalidateQueries({ queryKey: ['messages'] });
       qc.invalidateQueries({ queryKey: ['unread-count'] });
     },
   });
@@ -52,6 +53,7 @@ export function useMarkRead() {
       communicationApi.markRead(messageId).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inbox'] });
+      qc.invalidateQueries({ queryKey: ['messages'] });
       qc.invalidateQueries({ queryKey: ['unread-count'] });
     },
   });

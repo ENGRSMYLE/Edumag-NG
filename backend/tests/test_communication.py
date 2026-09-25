@@ -34,7 +34,11 @@ def _school_payload(name: str, email: str) -> dict:
 async def _register_school(client: AsyncClient, name: str = "Comm School", email: str = "admin@comm.ng") -> dict:
     resp = await client.post("/api/auth/register-school", json=_school_payload(name, email))
     assert resp.status_code == 201, f"School registration failed: {resp.text}"
-    return resp.json()
+    data = resp.json()
+    # Tests authenticate explicitly with bearer tokens; avoid the most recent
+    # response cookie overriding a token for another test user or school.
+    client.cookies.clear()
+    return data
 
 
 def _auth(token: str) -> dict:
@@ -49,9 +53,24 @@ async def _invite_user(
     name: str = "Test User",
 ) -> tuple[str, str]:
     """Invite a user and set their password. Returns (access_token, user_id)."""
+    payload = {"name": name, "email": email, "role": role}
+    if role == "teacher":
+        class_response = await client.post(
+            "/api/classes/",
+            json={
+                "name": f"Class {email}",
+                "level": "JSS 1",
+                "capacity": 40,
+                "academic_session": "2024/2025",
+                "term": "first",
+            },
+            headers=_auth(admin_token),
+        )
+        assert class_response.status_code == 201, class_response.text
+        payload["class_id"] = class_response.json()["id"]
     invite = await client.post(
         "/api/users/invite",
-        json={"name": name, "email": email, "role": role},
+        json=payload,
         headers=_auth(admin_token),
     )
     assert invite.status_code == 201, invite.text
@@ -62,7 +81,9 @@ async def _invite_user(
         json={"invite_token": data["invite_token"], "new_password": "TestPass1!"},
     )
     assert set_pw.status_code == 200, set_pw.text
-    return set_pw.json()["access_token"], data["user_id"]
+    token = set_pw.json()["access_token"]
+    client.cookies.clear()
+    return token, data["user_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +111,7 @@ async def test_teacher_cannot_message_another_teacher(client: AsyncClient) -> No
     assert resp.status_code == 403, resp.text
 
     # Teacher A CAN message the admin (super_admin)
-    admin_user_id = school["user"]["user_id"]
+    admin_user_id = school["user"]["id"]
     ok_resp = await client.post(
         "/api/communication/messages",
         json={"recipient_id": admin_user_id, "body": "Hello admin", "subject": "Check-in"},
@@ -183,7 +204,7 @@ async def test_unread_count_correct(client: AsyncClient) -> None:
     """Unread count reflects only unread messages for the current user."""
     school = await _register_school(client)
     admin_token = school["access_token"]
-    admin_id = school["user"]["user_id"]
+    admin_id = school["user"]["id"]
 
     teacher_token, teacher_id = await _invite_user(
         client, admin_token, email="teacher@comm.ng", role="teacher", name="The Teacher"
@@ -239,3 +260,64 @@ async def test_unread_count_correct(client: AsyncClient) -> None:
         headers=_auth(admin_token),
     )
     assert admin_count.json()["count"] == 0
+
+
+async def test_broadcast_read_state_threads_and_access_control(client: AsyncClient) -> None:
+    school = await _register_school(client)
+    admin_token = school["access_token"]
+    teacher_a_token, teacher_a_id = await _invite_user(
+        client, admin_token, "broadcast-a@comm.ng", name="Teacher A"
+    )
+    teacher_b_token, teacher_b_id = await _invite_user(
+        client, admin_token, "broadcast-b@comm.ng", name="Teacher B"
+    )
+
+    sent = await client.post(
+        "/api/communication/messages",
+        json={"recipient_group": "all_teachers", "subject": "Staff briefing", "body": "Please review."},
+        headers=_auth(admin_token),
+    )
+    assert sent.status_code == 201, sent.text
+    message = sent.json()
+    assert {r["id"] for r in message["recipients"]} == {teacher_a_id, teacher_b_id}
+
+    for token in (teacher_a_token, teacher_b_token):
+        count = await client.get("/api/communication/messages/unread-count", headers=_auth(token))
+        assert count.json()["count"] == 1
+
+    marked = await client.patch(
+        f"/api/communication/messages/{message['id']}/read", headers=_auth(teacher_a_token)
+    )
+    assert marked.status_code == 200
+    a_count = await client.get("/api/communication/messages/unread-count", headers=_auth(teacher_a_token))
+    b_count = await client.get("/api/communication/messages/unread-count", headers=_auth(teacher_b_token))
+    assert a_count.json()["count"] == 0
+    assert b_count.json()["count"] == 1
+
+    reply = await client.post(
+        "/api/communication/messages",
+        json={
+            "recipient_id": school["user"]["id"],
+            "thread_id": message["thread_id"],
+            "parent_message_id": message["id"],
+            "subject": "Re: Staff briefing",
+            "body": "Reviewed.",
+        },
+        headers=_auth(teacher_a_token),
+    )
+    assert reply.status_code == 201, reply.text
+    thread = await client.get(
+        f"/api/communication/messages/{message['id']}", headers=_auth(teacher_a_token)
+    )
+    assert thread.status_code == 200
+    assert len(thread.json()["items"]) == 2
+
+    private = await client.post(
+        "/api/communication/messages",
+        json={"recipient_id": teacher_a_id, "subject": "Private", "body": "For A only"},
+        headers=_auth(admin_token),
+    )
+    forbidden = await client.get(
+        f"/api/communication/messages/{private.json()['id']}", headers=_auth(teacher_b_token)
+    )
+    assert forbidden.status_code == 404

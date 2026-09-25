@@ -19,18 +19,42 @@ export interface MessageResponse {
   id: string;
   sender_id: string;
   sender_name: string;
-  recipient_id: string;
+  recipient_id: string | null;
   recipient_name: string;
+  recipients: MessageRecipient[];
   subject: string | null;
   body: string;
   is_read: boolean;
+  thread_id: string;
   created_at: string;
 }
 
 export interface SendMessageRequest {
-  recipient_id: string;
+  recipient_id?: string;
+  recipient_ids?: string[];
+  recipient_group?: 'all_teachers' | 'all_admins';
   body: string;
   subject?: string;
+  thread_id?: string;
+  parent_message_id?: string;
+}
+
+export interface MessageRecipient {
+  id: string;
+  name: string;
+  role: 'super_admin' | 'admin' | 'teacher';
+}
+
+export interface RecipientPage {
+  total: number;
+  page: number;
+  per_page: number;
+  items: MessageRecipient[];
+}
+
+export interface ThreadResponse {
+  thread_id: string;
+  items: MessageResponse[];
 }
 
 export interface InboxResponse {

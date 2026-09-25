@@ -300,11 +300,12 @@ export default function StaffCommunicationPage() {
   const announcements = announcementsData?.items ?? [];
 
   // Get users this teacher is allowed to message (admins / super_admins)
-  const { data: recipients = [] } = useQuery({
+  const { data: recipientsPage } = useQuery({
     queryKey: ['communication-recipients'],
-    queryFn: () => communicationApi.getRecipients().then((r) => r.data),
+    queryFn: () => communicationApi.getRecipients({ per_page: 100 }).then((r) => r.data),
     staleTime: 300_000,
   });
+  const recipients = recipientsPage?.items ?? [];
 
   const adminId = recipients[0]?.id ?? '';
 

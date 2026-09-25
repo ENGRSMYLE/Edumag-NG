@@ -49,6 +49,8 @@ import type {
   CreateAnnouncementRequest,
   MessageResponse,
   SendMessageRequest,
+  RecipientPage,
+  ThreadResponse,
   InboxResponse,
   UnreadCountResponse,
 } from '@/types/communication';
@@ -342,10 +344,10 @@ export const communicationApi = {
   createAnnouncement: (data: CreateAnnouncementRequest) =>
     api.post<Announcement>('/communication/announcements', data),
 
-  getInbox: (params?: { page?: number; per_page?: number; is_read?: boolean }) =>
+  getInbox: (params?: { page?: number; per_page?: number; is_read?: boolean; search?: string }) =>
     api.get<InboxResponse>('/communication/messages/inbox', { params }),
 
-  getSent: (params?: { page?: number; per_page?: number }) =>
+  getSent: (params?: { page?: number; per_page?: number; search?: string }) =>
     api.get<PaginatedResponse<MessageResponse>>('/communication/messages/sent', { params }),
 
   sendMessage: (data: SendMessageRequest) =>
@@ -357,8 +359,11 @@ export const communicationApi = {
   getUnreadCount: () =>
     api.get<UnreadCountResponse>('/communication/messages/unread-count'),
 
-  getRecipients: () =>
-    api.get<{ id: string; name: string; role: string }[]>('/communication/messages/recipients'),
+  getThread: (messageId: string) =>
+    api.get<ThreadResponse>(`/communication/messages/${messageId}`),
+
+  getRecipients: (params?: { search?: string; role?: string; page?: number; per_page?: number }) =>
+    api.get<RecipientPage>('/communication/messages/recipients', { params }),
 };
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@ from app.models.attendance import Attendance
 from app.models.result import Result
 from app.models.finance import Payment
 from app.models.assignment import Assignment, AssignmentSubmission
-from app.models.communication import Announcement, Message
+from app.models.communication import Announcement, Message, MessageRecipient
 from app.models.school_term import SchoolTerm
 from app.models.grading_system import GradingSystem
 from app.models.refresh_token import RefreshToken
@@ -28,6 +28,7 @@ __all__ = [
     "AssignmentSubmission",
     "Announcement",
     "Message",
+    "MessageRecipient",
     "SchoolTerm",
     "GradingSystem",
     "RefreshToken",

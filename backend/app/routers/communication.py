@@ -5,17 +5,18 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.rbac import require_permission
-from app.models.communication import Announcement, Message, TargetAudience
+from app.models.communication import Announcement, Message, MessageRecipient, TargetAudience
 from app.models.school_membership import MembershipRole, SchoolMembership
 from app.models.user import User
 from app.schemas.communication import (
@@ -23,10 +24,13 @@ from app.schemas.communication import (
     AnnouncementResponse,
     InboxResponse,
     MessageResponse,
+    MessageRecipientResponse,
     PaginatedAnnouncementResponse,
     PaginatedMessageResponse,
     RecipientResponse,
+    PaginatedRecipientResponse,
     SendMessageRequest,
+    ThreadResponse,
     UnreadCountResponse,
 )
 
@@ -49,23 +53,36 @@ def _announcement_response(a: Announcement) -> AnnouncementResponse:
     )
 
 
-def _message_response(m: Message) -> MessageResponse:
+def _message_response(m: Message, viewer_id: uuid.UUID) -> MessageResponse:
+    deliveries = list(m.recipients)
+    recipients = []
+    for delivery in deliveries:
+        membership = next((x for x in delivery.user.memberships if x.school_id == m.school_id), None)
+        recipients.append(MessageRecipientResponse(
+            id=delivery.user_id,
+            name=delivery.user.name,
+            role=membership.role.value if membership else "unknown",
+        ))
+    first = recipients[0] if recipients else None
+    own_delivery = next((x for x in deliveries if x.user_id == viewer_id), None)
     return MessageResponse(
         id=m.id,
         sender_id=m.sender_id,
         sender_name=m.sender.name,
-        recipient_id=m.recipient_id,
-        recipient_name=m.recipient.name,
+        recipient_id=first.id if first else m.recipient_id,
+        recipient_name=(first.name if len(recipients) == 1 else f"{len(recipients)} recipients") if first else "",
+        recipients=recipients,
         subject=m.subject,
         body=m.body,
-        is_read=m.is_read,
+        is_read=own_delivery.is_read if own_delivery else m.is_read,
+        thread_id=m.thread_id,
         created_at=m.created_at,
     )
 
 
 _MSG_OPTIONS = [
     selectinload(Message.sender),
-    selectinload(Message.recipient),
+    selectinload(Message.recipients).selectinload(MessageRecipient.user).selectinload(User.memberships),
 ]
 
 
@@ -154,11 +171,15 @@ async def list_announcements(
 # GET /messages/recipients — users this caller is allowed to message
 # ---------------------------------------------------------------------------
 
-@router.get("/messages/recipients", response_model=list[RecipientResponse])
+@router.get("/messages/recipients", response_model=PaginatedRecipientResponse)
 async def list_recipients(
+    search: Optional[str] = None,
+    role_filter: Optional[MembershipRole] = Query(None, alias="role"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> list[RecipientResponse]:
+) -> PaginatedRecipientResponse:
     school_id: uuid.UUID = current_user.current_school_id  # type: ignore[assignment]
     role = current_user.current_role.value  # type: ignore[attr-defined]
 
@@ -166,11 +187,11 @@ async def list_recipients(
     if role == "teacher":
         target_roles = [MembershipRole.admin, MembershipRole.super_admin]
     elif role == "admin":
-        target_roles = [MembershipRole.teacher, MembershipRole.super_admin]
+        target_roles = [MembershipRole.teacher, MembershipRole.admin, MembershipRole.super_admin]
     else:  # super_admin
-        target_roles = [MembershipRole.admin, MembershipRole.teacher]
+        target_roles = [MembershipRole.super_admin, MembershipRole.admin, MembershipRole.teacher]
 
-    result = await db.execute(
+    q = (
         select(User, SchoolMembership)
         .join(SchoolMembership, SchoolMembership.user_id == User.id)
         .where(
@@ -179,13 +200,18 @@ async def list_recipients(
             SchoolMembership.is_active == True,
             User.id != current_user.id,
         )
-        .order_by(User.name)
     )
-    rows = result.all()
-    return [
-        RecipientResponse(id=user.id, name=user.name, role=membership.role.value)
-        for user, membership in rows
-    ]
+    if role_filter:
+        if role_filter not in target_roles:
+            raise HTTPException(status_code=403, detail="You cannot message this role")
+        q = q.where(SchoolMembership.role == role_filter)
+    if search:
+        q = q.where(or_(User.name.ilike(f"%{search}%"), User.email.ilike(f"%{search}%")))
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
+    rows = (await db.execute(q.order_by(User.name).offset((page - 1) * per_page).limit(per_page))).all()
+    return PaginatedRecipientResponse(total=total, page=page, per_page=per_page, items=[
+        RecipientResponse(id=user.id, name=user.name, role=membership.role.value) for user, membership in rows
+    ])
 
 
 # ---------------------------------------------------------------------------
@@ -201,47 +227,60 @@ async def send_message(
     school_id: uuid.UUID = current_user.current_school_id  # type: ignore[assignment]
     role = current_user.current_role.value  # type: ignore[attr-defined]
 
-    # Verify recipient is a member of the same school
-    recipient_membership = await db.execute(
-        select(SchoolMembership)
-        .where(
-            SchoolMembership.user_id == body.recipient_id,
+    requested_ids = set(body.recipient_ids)
+    if body.recipient_id:
+        requested_ids.add(body.recipient_id)
+    if body.recipient_group:
+        if role == "teacher":
+            raise HTTPException(status_code=403, detail="Teachers cannot send broadcasts")
+        group_roles = {
+            "all_teachers": [MembershipRole.teacher],
+            "all_admins": [MembershipRole.admin, MembershipRole.super_admin],
+        }[body.recipient_group]
+        group_rows = await db.execute(select(SchoolMembership.user_id).where(
             SchoolMembership.school_id == school_id,
+            SchoolMembership.role.in_(group_roles),
             SchoolMembership.is_active == True,
-        )
-    )
-    membership = recipient_membership.scalar_one_or_none()
-    if membership is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Recipient not found in this school",
-        )
+            SchoolMembership.user_id != current_user.id,
+        ))
+        requested_ids.update(group_rows.scalars().all())
+    requested_ids.discard(current_user.id)
+    if not requested_ids:
+        raise HTTPException(status_code=422, detail="Select at least one recipient")
 
-    # Teacher can only message admin or super_admin
-    if role == "teacher":
-        recipient_role = membership.role.value
-        if recipient_role not in ("admin", "super_admin"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Teachers can only message admin staff",
-            )
+    membership_rows = (await db.execute(select(SchoolMembership).where(
+        SchoolMembership.user_id.in_(requested_ids),
+        SchoolMembership.school_id == school_id,
+        SchoolMembership.is_active == True,
+    ))).scalars().all()
+    if len(membership_rows) != len(requested_ids):
+        raise HTTPException(status_code=404, detail="One or more recipients were not found in this school")
+    if role == "teacher" and any(m.role not in (MembershipRole.admin, MembershipRole.super_admin) for m in membership_rows):
+        raise HTTPException(status_code=403, detail="Teachers can only message admin staff")
 
-    # Cannot message yourself
-    if body.recipient_id == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot send a message to yourself",
-        )
+    thread_id = body.thread_id or uuid.uuid4()
+    if body.thread_id:
+        access = await db.execute(select(Message.id).outerjoin(MessageRecipient).where(
+            Message.thread_id == body.thread_id,
+            Message.school_id == school_id,
+            or_(Message.sender_id == current_user.id, MessageRecipient.user_id == current_user.id),
+        ).limit(1))
+        if access.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
     msg = Message(
         school_id=school_id,
         sender_id=current_user.id,
-        recipient_id=body.recipient_id,
+        recipient_id=next(iter(requested_ids)) if len(requested_ids) == 1 else None,
         subject=body.subject,
         body=body.body,
         is_read=False,
+        thread_id=thread_id,
+        parent_message_id=body.parent_message_id,
     )
     db.add(msg)
+    await db.flush()
+    db.add_all([MessageRecipient(message_id=msg.id, user_id=user_id) for user_id in requested_ids])
     await db.flush()
 
     result = await db.execute(
@@ -251,7 +290,7 @@ async def send_message(
     )
     msg = result.scalar_one()
     await db.commit()
-    return _message_response(msg)
+    return _message_response(msg, current_user.id)
 
 
 # ---------------------------------------------------------------------------
@@ -266,10 +305,11 @@ async def unread_count(
     school_id: uuid.UUID = current_user.current_school_id  # type: ignore[assignment]
 
     row = await db.execute(
-        select(func.count(Message.id)).where(
+        select(func.count(MessageRecipient.id)).join(Message).where(
             Message.school_id == school_id,
-            Message.recipient_id == current_user.id,
-            Message.is_read == False,
+            MessageRecipient.user_id == current_user.id,
+            MessageRecipient.is_deleted == False,
+            MessageRecipient.is_read == False,
         )
     )
     return UnreadCountResponse(count=row.scalar_one())
@@ -282,6 +322,7 @@ async def unread_count(
 @router.get("/messages/inbox", response_model=InboxResponse)
 async def inbox(
     is_read: Optional[bool] = None,
+    search: Optional[str] = None,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
@@ -291,24 +332,33 @@ async def inbox(
 
     q = (
         select(Message)
+        .join(MessageRecipient)
         .where(
             Message.school_id == school_id,
-            Message.recipient_id == current_user.id,
+            MessageRecipient.user_id == current_user.id,
+            MessageRecipient.is_deleted == False,
         )
         .options(*_MSG_OPTIONS)
         .order_by(Message.created_at.desc())
     )
     if is_read is not None:
-        q = q.where(Message.is_read == is_read)
+        q = q.where(MessageRecipient.is_read == is_read)
+    if search:
+        q = q.join(Message.sender).where(or_(
+            Message.subject.ilike(f"%{search}%"),
+            Message.body.ilike(f"%{search}%"),
+            User.name.ilike(f"%{search}%"),
+        ))
 
     count_q = select(func.count()).select_from(q.subquery())
     total = (await db.execute(count_q)).scalar_one()
 
     unread_row = await db.execute(
-        select(func.count(Message.id)).where(
+        select(func.count(MessageRecipient.id)).join(Message).where(
             Message.school_id == school_id,
-            Message.recipient_id == current_user.id,
-            Message.is_read == False,
+            MessageRecipient.user_id == current_user.id,
+            MessageRecipient.is_deleted == False,
+            MessageRecipient.is_read == False,
         )
     )
     unread_count_val: int = unread_row.scalar_one()
@@ -320,7 +370,7 @@ async def inbox(
         total=total,
         page=page,
         per_page=per_page,
-        items=[_message_response(m) for m in items],
+        items=[_message_response(m, current_user.id) for m in items],
         unread_count=unread_count_val,
     )
 
@@ -331,6 +381,7 @@ async def inbox(
 
 @router.get("/messages/sent", response_model=PaginatedMessageResponse)
 async def sent_messages(
+    search: Optional[str] = None,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
@@ -347,6 +398,8 @@ async def sent_messages(
         .options(*_MSG_OPTIONS)
         .order_by(Message.created_at.desc())
     )
+    if search:
+        q = q.where(or_(Message.subject.ilike(f"%{search}%"), Message.body.ilike(f"%{search}%")))
 
     count_q = select(func.count()).select_from(q.subquery())
     total = (await db.execute(count_q)).scalar_one()
@@ -356,7 +409,7 @@ async def sent_messages(
 
     return PaginatedMessageResponse(
         total=total, page=page, per_page=per_page,
-        items=[_message_response(m) for m in items],
+        items=[_message_response(m, current_user.id) for m in items],
     )
 
 
@@ -373,29 +426,46 @@ async def mark_read(
     school_id: uuid.UUID = current_user.current_school_id  # type: ignore[assignment]
 
     result = await db.execute(
-        select(Message)
+        select(MessageRecipient)
+        .join(Message)
         .where(
             Message.id == message_id,
             Message.school_id == school_id,
+            MessageRecipient.user_id == current_user.id,
         )
-        .options(*_MSG_OPTIONS)
     )
-    msg = result.scalar_one_or_none()
-    if msg is None:
+    delivery = result.scalar_one_or_none()
+    if delivery is None:
         raise HTTPException(status_code=404, detail="Message not found")
-
-    if msg.recipient_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only mark your own messages as read",
-        )
-
-    msg.is_read = True
+    delivery.is_read = True
+    delivery.read_at = datetime.now(timezone.utc)
     await db.commit()
-    await db.refresh(msg)
 
     result = await db.execute(
         select(Message).where(Message.id == message_id).options(*_MSG_OPTIONS)
     )
     msg = result.scalar_one()
-    return _message_response(msg)
+    return _message_response(msg, current_user.id)
+
+
+@router.get("/messages/{message_id}", response_model=ThreadResponse)
+async def get_conversation(
+    message_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ThreadResponse:
+    school_id: uuid.UUID = current_user.current_school_id  # type: ignore[assignment]
+    seed = (await db.execute(select(Message).outerjoin(MessageRecipient).where(
+        Message.id == message_id,
+        Message.school_id == school_id,
+        or_(Message.sender_id == current_user.id, MessageRecipient.user_id == current_user.id),
+    ).distinct())).scalar_one_or_none()
+    if seed is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+    q = select(Message).outerjoin(MessageRecipient).where(
+        Message.thread_id == seed.thread_id,
+        Message.school_id == school_id,
+        or_(Message.sender_id == current_user.id, MessageRecipient.user_id == current_user.id),
+    ).options(*_MSG_OPTIONS).distinct().order_by(Message.created_at)
+    items = (await db.execute(q)).scalars().all()
+    return ThreadResponse(thread_id=seed.thread_id, items=[_message_response(item, current_user.id) for item in items])
