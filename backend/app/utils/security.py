@@ -48,7 +48,7 @@ def create_refresh_token(data: dict) -> str:
 
 def create_invite_token(membership_id: str) -> str:
     return _encode(
-        {"sub": membership_id, "type": "invite"},
+        {"sub": membership_id, "type": "invite", "jti": secrets.token_urlsafe(16)},
         timedelta(hours=settings.INVITE_TOKEN_EXPIRE_HOURS),
     )
 

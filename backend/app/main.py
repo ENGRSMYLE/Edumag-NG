@@ -25,6 +25,7 @@ from app.routers import users as users_router
 from app.routers import students as students_router
 from app.routers import classes as classes_router
 from app.routers import parents as parents_router
+from app.routers import parent_portal as parent_portal_router
 from app.routers import attendance as attendance_router
 from app.routers import results as results_router
 from app.routers import finance as finance_router
@@ -80,6 +81,7 @@ app.include_router(auth_router.router, prefix="/api")
 app.include_router(users_router.router, prefix="/api")
 app.include_router(students_router.router, prefix="/api")
 app.include_router(classes_router.router, prefix="/api")
+app.include_router(parent_portal_router.router, prefix="/api")
 app.include_router(parents_router.router, prefix="/api")
 app.include_router(attendance_router.router, prefix="/api")
 app.include_router(results_router.router, prefix="/api")

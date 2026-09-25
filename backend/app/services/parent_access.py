@@ -158,9 +158,12 @@ async def get_child_permissions(
 
 
 async def load_parent_dashboard_summary(
-    db: AsyncSession, context: ParentContext
+    db: AsyncSession,
+    context: ParentContext,
+    children: list[AuthorizedParentStudent] | None = None,
 ) -> ParentDashboardSummary:
-    children = await list_authorized_children(db, context)
+    if children is None:
+        children = await list_authorized_children(db, context)
     student_ids = [item.student.id for item in children]
     if not student_ids:
         return ParentDashboardSummary(0, 0, 0, 0, 0)
