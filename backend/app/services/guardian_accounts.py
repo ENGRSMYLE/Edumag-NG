@@ -82,6 +82,15 @@ async def reactivate_guardian_account(
         raise _conflict("The global account is disabled and requires administrator review")
     if profile.status != GuardianStatus.disabled:
         raise _conflict("Guardian account is not disabled")
+    active_relationships = (await db.execute(
+        select(func.count(StudentGuardian.id)).where(
+            StudentGuardian.guardian_profile_id == profile.id,
+            StudentGuardian.school_id == school_id,
+            StudentGuardian.is_active.is_(True),
+        )
+    )).scalar_one()
+    if active_relationships == 0:
+        raise _conflict("Link an active student relationship before enabling this parent")
     profile.status = GuardianStatus.active
     membership.is_active = True
     db.add(_audit(school_id, actor_user_id, "parent_account_reactivated", "guardian_profile", profile.id))

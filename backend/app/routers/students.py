@@ -9,7 +9,7 @@ import logging
 import uuid
 
 import openpyxl  # type: ignore
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +32,13 @@ from app.schemas.student import (
     StudentResponse,
     StudentTransfer,
     StudentUpdate,
+)
+from app.schemas.guardian import StudentGuardianCreate, StudentGuardianResponse, StudentGuardianUpdate
+from app.services.parent_management import (
+    link_guardian_to_student,
+    list_student_guardians,
+    unlink_guardian_from_student,
+    update_student_guardian,
 )
 from app.services.student_service import generate_admission_number, process_bulk_upload
 
@@ -623,3 +630,66 @@ async def bulk_upload_template(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=students_template.xlsx"},
     )
+
+
+@router.get("/{student_id}/guardians", response_model=list[StudentGuardianResponse])
+async def get_student_guardians(
+    student_id: uuid.UUID,
+    current_user: User = Depends(require_permission("view_parent_accounts")),
+    db: AsyncSession = Depends(get_db),
+) -> list[StudentGuardianResponse]:
+    return await list_student_guardians(db, current_user.current_school_id, student_id)  # type: ignore[attr-defined]
+
+
+@router.post(
+    "/{student_id}/guardians",
+    status_code=status.HTTP_201_CREATED,
+    response_model=StudentGuardianResponse,
+)
+async def add_student_guardian(
+    student_id: uuid.UUID,
+    payload: StudentGuardianCreate,
+    current_user: User = Depends(require_permission("link_guardian_to_student")),
+    db: AsyncSession = Depends(get_db),
+) -> StudentGuardianResponse:
+    return await link_guardian_to_student(
+        db, current_user.current_school_id, student_id, current_user.id, payload  # type: ignore[attr-defined]
+    )
+
+
+@router.patch(
+    "/{student_id}/guardians/{relationship_id}",
+    response_model=StudentGuardianResponse,
+)
+async def edit_student_guardian(
+    student_id: uuid.UUID,
+    relationship_id: uuid.UUID,
+    payload: StudentGuardianUpdate,
+    current_user: User = Depends(require_permission("edit_parent_account")),
+    db: AsyncSession = Depends(get_db),
+) -> StudentGuardianResponse:
+    return await update_student_guardian(
+        db,
+        current_user.current_school_id,  # type: ignore[attr-defined]
+        student_id,
+        relationship_id,
+        current_user.id,
+        payload,
+    )
+
+
+@router.delete("/{student_id}/guardians/{relationship_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_student_guardian(
+    student_id: uuid.UUID,
+    relationship_id: uuid.UUID,
+    current_user: User = Depends(require_permission("unlink_guardian_from_student")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    await unlink_guardian_from_student(
+        db,
+        current_user.current_school_id,  # type: ignore[attr-defined]
+        student_id,
+        relationship_id,
+        current_user.id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

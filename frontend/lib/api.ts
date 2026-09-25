@@ -297,9 +297,9 @@ export const parentsApi = {
     api.get<PaginatedResponse<ParentListItem>>('/parents/', { params }),
 
   create: (data: CreateParentRequest) =>
-    api.post<ParentListItem>('/parents/', data),
+    api.post('/parents/invite', data),
 
-  update: (id: string, data: Partial<CreateParentRequest>) =>
+  update: (id: string, data: Partial<Pick<ParentListItem, 'name' | 'address' | 'occupation'>>) =>
     api.patch<ParentListItem>(`/parents/${id}`, data),
 };
 

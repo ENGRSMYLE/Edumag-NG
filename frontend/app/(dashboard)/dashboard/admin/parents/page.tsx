@@ -12,18 +12,11 @@ import { parentsApi } from '@/lib/api';
 import { formatNigerianPhone, getInitials } from '@/lib/formatters';
 import type { ParentListItem } from '@/types/parent';
 
-const RELATIONSHIP_LABELS: Record<string, string> = {
-  father: 'Father',
-  mother: 'Mother',
-  guardian: 'Guardian',
-  other: 'Other',
-};
-
-const RELATIONSHIP_VARIANT: Record<string, 'info' | 'success' | 'neutral' | 'warning'> = {
-  father:   'info',
-  mother:   'success',
-  guardian: 'warning',
-  other:    'neutral',
+const STATUS_VARIANT: Record<string, 'info' | 'success' | 'neutral' | 'warning'> = {
+  active: 'success',
+  invited: 'info',
+  disabled: 'neutral',
+  suspended: 'warning',
 };
 
 function ParentNameCell({ row }: { row: ParentListItem }) {
@@ -62,18 +55,18 @@ export default function AdminParentsPage() {
       render: (_, row) => <ParentNameCell row={row} />,
     },
     {
-      key: 'student_name',
-      header: 'Student',
+      key: 'active_children_count',
+      header: 'Children',
       render: (v) => (
         <span className="text-sm text-[var(--color-text-secondary)]">{String(v)}</span>
       ),
     },
     {
-      key: 'relationship',
-      header: 'Relationship',
+      key: 'activation_status',
+      header: 'Status',
       render: (v) => (
-        <Badge variant={RELATIONSHIP_VARIANT[String(v)] ?? 'neutral'}>
-          {RELATIONSHIP_LABELS[String(v)] ?? String(v)}
+        <Badge variant={STATUS_VARIANT[String(v)] ?? 'neutral'}>
+          {String(v).replace('_', ' ')}
         </Badge>
       ),
     },
@@ -107,7 +100,7 @@ export default function AdminParentsPage() {
       ),
     },
     {
-      key: 'id',
+      key: 'guardian_id',
       header: 'Actions',
       className: 'w-24',
       render: (_, row) => (
@@ -135,7 +128,7 @@ export default function AdminParentsPage() {
       <DataTable
         columns={columns}
         data={(data?.items ?? []) as unknown as ParentListItem[]}
-        rowKey="id"
+        rowKey="guardian_id"
         isLoading={isLoading}
         totalCount={data?.total ?? 0}
         page={page}
