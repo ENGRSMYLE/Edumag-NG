@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Index, String, func
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,6 +12,7 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.class_ import Class
     from app.models.parent import Parent
+    from app.models.guardian import StudentGuardian
 
 
 class Gender(str, enum.Enum):
@@ -29,6 +30,7 @@ class Student(Base):
             unique=True,
         ),
         Index("ix_students_school_id", "school_id"),
+        UniqueConstraint("id", "school_id", name="uq_students_id_school"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -76,4 +78,7 @@ class Student(Base):
     )
     parents: Mapped[list["Parent"]] = relationship(
         "Parent", back_populates="student"
+    )
+    guardian_links: Mapped[list["StudentGuardian"]] = relationship(
+        "StudentGuardian", back_populates="student", overlaps="guardian_profile,student_links"
     )

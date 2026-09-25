@@ -18,6 +18,7 @@ const ROLE_HOME: Record<UserRole, string> = {
   super_admin: '/dashboard/super-admin',
   admin: '/dashboard/admin',
   teacher: '/dashboard/staff',
+  parent: '/dashboard/parent',
 };
 
 const schema = z

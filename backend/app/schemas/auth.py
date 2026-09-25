@@ -8,6 +8,7 @@ from app.models.school import SchoolType
 
 
 _NIGERIAN_PHONE_RE = re.compile(r"^(\+234|234|0)[789][01]\d{8}$")
+AuthRole = Literal["super_admin", "admin", "teacher", "parent"]
 
 
 class SendOTPRequest(BaseModel):
@@ -72,7 +73,7 @@ class SchoolOption(BaseModel):
     school_id: uuid.UUID
     school_name: str
     school_logo_url: Optional[str] = None
-    role: str
+    role: AuthRole
     is_first_login: bool
 
     model_config = {"from_attributes": True}
@@ -98,7 +99,7 @@ class UserInToken(BaseModel):
     id: uuid.UUID
     name: str
     email: str
-    role: str
+    role: AuthRole
     school_id: uuid.UUID
     school_name: str
     membership_id: uuid.UUID

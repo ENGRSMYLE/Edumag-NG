@@ -73,9 +73,12 @@ export const PERMISSIONS = {
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
-export type UserRole = 'super_admin' | 'admin' | 'teacher';
+export type UserRole = 'super_admin' | 'admin' | 'teacher' | 'parent';
 
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
+  // Parent portal permissions are intentionally added in Phase 3. Until then,
+  // the role is recognized but grants no application permissions.
+  parent: [],
   teacher: [
     PERMISSIONS.VIEW_OWN_CLASS_STUDENTS,
     PERMISSIONS.ASSIGN_STUDENT_TO_CLASS,

@@ -42,7 +42,7 @@ export interface SendMessageRequest {
 export interface MessageRecipient {
   id: string;
   name: string;
-  role: 'super_admin' | 'admin' | 'teacher';
+  role: 'super_admin' | 'admin' | 'teacher' | 'parent';
 }
 
 export interface RecipientPage {

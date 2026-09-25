@@ -16,12 +16,14 @@ const ROLE_HOME: Record<UserRole, string> = {
   super_admin: '/dashboard/super-admin',
   admin: '/dashboard/admin',
   teacher: '/dashboard/staff',
+  parent: '/dashboard/parent',
 };
 
 const ROLE_LABEL: Record<UserRole, string> = {
   super_admin: 'Super Admin',
   admin: 'Admin',
   teacher: 'Teacher',
+  parent: 'Parent',
 };
 
 export default function SelectSchoolPage() {

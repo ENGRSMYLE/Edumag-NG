@@ -7,6 +7,7 @@ const ROLE_HOME: Record<string, string> = {
   super_admin: '/dashboard/super-admin',
   admin: '/dashboard/admin',
   teacher: '/dashboard/staff',
+  parent: '/dashboard/parent',
 };
 
 export function middleware(request: NextRequest) {

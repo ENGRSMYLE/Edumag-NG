@@ -3,6 +3,7 @@ from app.models.user import User
 from app.models.school_membership import SchoolMembership
 from app.models.student import Student
 from app.models.parent import Parent
+from app.models.guardian import GuardianProfile, StudentGuardian
 from app.models.class_ import Class
 from app.models.attendance import Attendance
 from app.models.result import Result
@@ -20,6 +21,8 @@ __all__ = [
     "SchoolMembership",
     "Student",
     "Parent",
+    "GuardianProfile",
+    "StudentGuardian",
     "Class",
     "Attendance",
     "Result",

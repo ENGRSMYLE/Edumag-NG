@@ -19,6 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
+    from app.models.guardian import GuardianProfile
     from app.models.user import User
     from app.models.school import School
 
@@ -27,12 +28,14 @@ class MembershipRole(str, enum.Enum):
     super_admin = "super_admin"
     admin = "admin"
     teacher = "teacher"
+    parent = "parent"
 
 
 class SchoolMembership(Base):
     __tablename__ = "school_memberships"
     __table_args__ = (
         UniqueConstraint("user_id", "school_id", name="uq_user_school"),
+        UniqueConstraint("id", "school_id", name="uq_membership_id_school"),
         Index("ix_membership_school_role", "school_id", "role"),
         Index("ix_membership_user_id", "user_id"),
         Index("ix_membership_school_id", "school_id"),
@@ -88,4 +91,7 @@ class SchoolMembership(Base):
         "School",
         back_populates="memberships",
         foreign_keys=[school_id],
+    )
+    guardian_profile: Mapped["GuardianProfile | None"] = relationship(
+        "GuardianProfile", back_populates="membership", uselist=False
     )
