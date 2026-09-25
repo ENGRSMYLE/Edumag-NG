@@ -17,8 +17,10 @@ from app.database import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.rbac import require_permission
 from app.models.communication import Announcement, Message, MessageRecipient, TargetAudience
+from app.models.notification import DomainEventType
 from app.models.school_membership import MembershipRole, SchoolMembership
 from app.models.user import User
+from app.services.notifications import emit_notifications
 from app.schemas.communication import (
     AnnouncementCreate,
     AnnouncementResponse,
@@ -107,6 +109,18 @@ async def create_announcement(
     )
     db.add(ann)
     await db.flush()
+    audience_roles = {
+        "all": list(MembershipRole),
+        "admin": [MembershipRole.admin, MembershipRole.super_admin],
+        "teacher": [MembershipRole.teacher],
+    }[body.target_audience.value]
+    recipient_ids = set((await db.execute(select(SchoolMembership.user_id).where(
+        SchoolMembership.school_id == school_id,
+        SchoolMembership.role.in_(audience_roles),
+        SchoolMembership.is_active.is_(True),
+        SchoolMembership.user_id != current_user.id,
+    ))).scalars().all())
+    await emit_notifications(db, school_id=school_id, user_ids=recipient_ids, event_type=DomainEventType.announcement_published, title=body.title, body=body.body, data={"announcement_id": str(ann.id)})
 
     result = await db.execute(
         select(Announcement)
@@ -286,6 +300,7 @@ async def send_message(
     await db.flush()
     db.add_all([MessageRecipient(message_id=msg.id, user_id=user_id) for user_id in requested_ids])
     await db.flush()
+    await emit_notifications(db, school_id=school_id, user_ids=requested_ids, event_type=DomainEventType.message_received, title=body.subject or "New message", body=body.body[:240], data={"message_id": str(msg.id), "thread_id": str(thread_id)})
 
     result = await db.execute(
         select(Message)

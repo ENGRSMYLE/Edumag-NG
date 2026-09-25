@@ -63,6 +63,7 @@ import type {
   GradeSubmissionRequest,
   AssignmentListParams,
 } from '@/types/assignment';
+import type { AppNotification, NotificationPage } from '@/types/notification';
 
 // ---------------------------------------------------------------------------
 // Axios instance
@@ -317,6 +318,12 @@ export const parentPortalApi = {
     api.get<ParentResultsPage>(`/parents/me/children/${studentId}/results`, { params }),
   assignments: (studentId: string, params?: { page?: number; per_page?: number }) => api.get<ParentAssignmentsPage>(`/parents/me/children/${studentId}/assignments`, { params }),
   finance: (studentId: string, params?: { page?: number; per_page?: number }) => api.get<ParentFinancePage>(`/parents/me/children/${studentId}/finance`, { params }),
+};
+
+export const notificationsApi = {
+  list: (params?: { page?: number; per_page?: number; unread_only?: boolean }) => api.get<NotificationPage>('/notifications', { params }),
+  unreadCount: () => api.get<{ count: number }>('/notifications/unread-count'),
+  markRead: (id: string) => api.patch<AppNotification>(`/notifications/${id}/read`),
 };
 
 // ---------------------------------------------------------------------------

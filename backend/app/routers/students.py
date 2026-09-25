@@ -82,7 +82,11 @@ def _to_response(student: Student) -> StudentResponse:
     if student.current_class is not None:
         class_name = student.current_class.name
 
-    parent_count = len(student.parents) if student.parents is not None else 0
+    # Compatibility release: prefer the new relationship model, but retain a
+    # legacy read fallback until the migration verification gate is signed off.
+    guardian_count = len(student.guardian_links) if student.guardian_links is not None else 0
+    legacy_count = len(student.parents) if student.parents is not None else 0
+    parent_count = guardian_count if guardian_count else legacy_count
 
     return StudentResponse(
         id=student.id,
@@ -124,6 +128,7 @@ async def _get_student_or_404(
         .options(
             joinedload(Student.current_class),
             selectinload(Student.parents),
+            selectinload(Student.guardian_links),
         )
     )
     student = result.scalar_one_or_none()

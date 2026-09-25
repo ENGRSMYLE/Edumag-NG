@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useUnreadCount } from '@/hooks/useCommunication';
+import { useNotificationUnreadCount } from '@/hooks/useNotifications';
 import { getInitials } from '@/lib/formatters';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
@@ -96,7 +97,8 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   });
 
   const { data: unreadData } = useUnreadCount();
-  const unreadCount = unreadData?.count ?? 0;
+  const { data: notificationUnreadData } = useNotificationUnreadCount();
+  const unreadCount = (unreadData?.count ?? 0) + (notificationUnreadData?.count ?? 0);
 
   const { data: schools = [], isLoading: schoolsLoading } = useQuery<SchoolOption[]>({
     queryKey: ['my-schools'],

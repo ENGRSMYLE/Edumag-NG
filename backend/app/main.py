@@ -34,6 +34,7 @@ from app.routers import communication as communication_router
 from app.routers import dashboard as dashboard_router
 from app.routers import settings as settings_router
 from app.routers import guardians as guardians_router
+from app.routers import notifications as notifications_router
 from app.utils.rate_limit import limiter  # single shared limiter instance
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,7 @@ app.include_router(communication_router.router, prefix="/api")
 app.include_router(dashboard_router.router, prefix="/api")
 app.include_router(settings_router.router, prefix="/api")
 app.include_router(guardians_router.router, prefix="/api")
+app.include_router(notifications_router.router, prefix="/api")
 
 # ---------------------------------------------------------------------------
 # Health check
