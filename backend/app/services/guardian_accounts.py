@@ -198,6 +198,7 @@ async def create_or_link_guardian(
     school_id: uuid.UUID,
     actor_user_id: uuid.UUID,
     payload: GuardianInviteRequest,
+    commit: bool = True,
 ) -> GuardianInviteResult:
     normalized_email = normalize_email(str(payload.email))
     normalized_phone = normalize_phone(payload.phone)
@@ -381,10 +382,13 @@ async def create_or_link_guardian(
                 membership.id,
             ))
 
-        await db.commit()
-        await db.refresh(profile)
-        await db.refresh(membership)
-        await db.refresh(relationship)
+        if commit:
+            await db.commit()
+            await db.refresh(profile)
+            await db.refresh(membership)
+            await db.refresh(relationship)
+        else:
+            await db.flush()
         return GuardianInviteResult(
             guardian_profile=profile,
             membership=membership,
@@ -394,11 +398,14 @@ async def create_or_link_guardian(
             email_task=email_task,
         )
     except HTTPException:
-        await db.rollback()
+        if commit:
+            await db.rollback()
         raise
     except IntegrityError as exc:
-        await db.rollback()
+        if commit:
+            await db.rollback()
         raise _conflict("Guardian relationship could not be created because it conflicts with existing data") from exc
     except Exception:
-        await db.rollback()
+        if commit:
+            await db.rollback()
         raise

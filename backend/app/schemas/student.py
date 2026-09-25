@@ -128,6 +128,7 @@ class BulkUploadRow(BaseModel):
 
 class BulkUploadRequest(BaseModel):
     rows: list[dict[str, Any]] = Field(..., min_length=1, max_length=1000)
+    dispatch_parent_invitations: bool = False
 
 
 class BulkUploadErrorRow(BaseModel):
@@ -135,11 +136,23 @@ class BulkUploadErrorRow(BaseModel):
     admission_number: str
     reason: str
 
+class BulkUploadRowResult(BaseModel):
+    row: int
+    admission_number: str
+    status: str
+    student_id: uuid.UUID | None = None
+    guardian_linked: bool = False
+    reason: str | None = None
+
 
 class BulkUploadResult(BaseModel):
     success_count: int
     error_rows: list[BulkUploadErrorRow]
     created_students: list[StudentListItem]
+    guardian_links_created: int = 0
+    pending_parent_invitations: int = 0
+    invitations_dispatched: int = 0
+    row_results: list[BulkUploadRowResult] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

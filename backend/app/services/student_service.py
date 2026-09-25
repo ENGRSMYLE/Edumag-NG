@@ -18,9 +18,14 @@ from app.models.student import Gender, Student
 from app.schemas.student import (
     BulkUploadErrorRow,
     BulkUploadResult,
+    BulkUploadRowResult,
     StudentCreate,
     StudentListItem,
 )
+from app.schemas.guardian import GuardianInviteRequest
+from app.models.parent import ParentRelationship
+from app.models.guardian import PreferredContactChannel
+from app.services.guardian_accounts import GuardianEmailTask, create_or_link_guardian
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -86,6 +91,37 @@ def _cell(row: dict, key: str) -> str:
     if v is None:
         return ""
     return str(v).strip()
+
+
+def _boolean_cell(row: dict, key: str, default: bool) -> bool:
+    value = _cell(row, key).casefold()
+    if not value:
+        return default
+    if value in {"true", "yes", "1", "y"}:
+        return True
+    if value in {"false", "no", "0", "n"}:
+        return False
+    raise ValueError(f"{key.replace('_', ' ').title()} must be Yes or No")
+
+
+def _guardian_payload(row: dict, student_id: uuid.UUID) -> GuardianInviteRequest | None:
+    fields = [_cell(row, key) for key in ("parent_name", "parent_email", "parent_phone", "relationship")]
+    if not any(fields):
+        return None
+    if not all(fields):
+        raise ValueError("Parent name, email, phone, and relationship are all required when adding a guardian")
+    relationship = fields[3].casefold()
+    if relationship not in {item.value for item in ParentRelationship}:
+        raise ValueError("Relationship must be father, mother, guardian, or other")
+    return GuardianInviteRequest(
+        student_id=student_id,
+        name=fields[0], email=fields[1], phone=fields[2],
+        relationship_type=ParentRelationship(relationship),
+        is_primary=_boolean_cell(row, "primary_guardian", False),
+        can_view_finance=_boolean_cell(row, "finance_access", False),
+        can_receive_messages=_boolean_cell(row, "messaging_access", True),
+        preferred_contact_channel=PreferredContactChannel.email,
+    )
 
 
 def validate_bulk_row(
@@ -159,7 +195,7 @@ async def process_bulk_upload(
     rows: list[dict],
     school_id: uuid.UUID,
     current_user: "User",
-) -> BulkUploadResult:
+) -> tuple[BulkUploadResult, list[GuardianEmailTask]]:
     """
     Validate parsed spreadsheet rows and create students row-by-row.
     Bad rows are collected in error_rows — never abort the whole upload.
@@ -181,6 +217,9 @@ async def process_bulk_upload(
 
     error_rows: list[BulkUploadErrorRow] = []
     created: list[StudentListItem] = []
+    invitation_tasks: list[GuardianEmailTask] = []
+    guardian_links_created = 0
+    success_rows: list[BulkUploadRowResult] = []
 
     for row_idx, row_dict in enumerate(rows, start=2):  # spreadsheet row 1 is the header
         adm_label = _cell(row_dict, "admission_number") or f"row-{row_idx}"
@@ -207,6 +246,7 @@ async def process_bulk_upload(
 
         existing_adm_numbers.add(adm_num)
 
+        savepoint = await db.begin_nested()
         student = Student(
             school_id=school_id,
             admission_number=adm_num,
@@ -225,15 +265,31 @@ async def process_bulk_upload(
             is_active=True,
         )
         db.add(student)
+        row_invitation_task: GuardianEmailTask | None = None
+        linked_guardian = False
         try:
             await db.flush()
+            guardian = _guardian_payload(row_dict, student.id)
+            if guardian:
+                guardian_result = await create_or_link_guardian(
+                    db, school_id=school_id, actor_user_id=current_user.id,
+                    payload=guardian, commit=False,
+                )
+                linked_guardian = True
+                row_invitation_task = guardian_result.email_task
+            await savepoint.commit()
+            if linked_guardian:
+                guardian_links_created += 1
+            if row_invitation_task:
+                invitation_tasks.append(row_invitation_task)
         except Exception as exc:
-            await db.rollback()
+            await savepoint.rollback()
+            existing_adm_numbers.discard(adm_num)
             logger.warning("Bulk upload row %d flush error: %s", row_idx, exc)
             error_rows.append(BulkUploadErrorRow(
                 row=row_idx,
                 admission_number=adm_num,
-                reason="Database error while saving row",
+                reason=(getattr(exc, "detail", None) or str(exc) or "Database error while saving row"),
             ))
             continue
 
@@ -261,10 +317,18 @@ async def process_bulk_upload(
             admission_date=student.admission_date,
             photo_url=None,
         ))
+        success_rows.append(BulkUploadRowResult(row=row_idx, admission_number=adm_num, status="success", student_id=student.id, guardian_linked=linked_guardian))
 
     await db.commit()
     return BulkUploadResult(
         success_count=len(created),
         error_rows=error_rows,
         created_students=created,
-    )
+        guardian_links_created=guardian_links_created,
+        pending_parent_invitations=len(invitation_tasks),
+        invitations_dispatched=0,
+        row_results=sorted(
+            success_rows + [BulkUploadRowResult(row=item.row, admission_number=item.admission_number, status="error", reason=item.reason) for item in error_rows],
+            key=lambda item: item.row,
+        ),
+    ), invitation_tasks

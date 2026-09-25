@@ -9,7 +9,7 @@ import logging
 import uuid
 
 import openpyxl  # type: ignore
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +41,7 @@ from app.services.parent_management import (
     update_student_guardian,
 )
 from app.services.student_service import generate_admission_number, process_bulk_upload
+from app.routers.guardians import _queue_invitation_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/students", tags=["students"])
@@ -571,11 +572,18 @@ async def promote_students(
 @router.post("/bulk-upload", response_model=BulkUploadResult)
 async def bulk_upload_students(
     body: BulkUploadRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_permission("bulk_upload_students")),
     db: AsyncSession = Depends(get_db),
 ) -> BulkUploadResult:
     school_id: uuid.UUID = current_user.current_school_id  # type: ignore[attr-defined]
-    return await process_bulk_upload(db, body.rows, school_id, current_user)
+    result, invitation_tasks = await process_bulk_upload(db, body.rows, school_id, current_user)
+    if body.dispatch_parent_invitations:
+        for task in invitation_tasks:
+            _queue_invitation_email(background_tasks, task)
+        result.invitations_dispatched = len(invitation_tasks)
+        result.pending_parent_invitations = 0
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -595,6 +603,8 @@ async def bulk_upload_template(
         "Date of Birth* (YYYY-MM-DD)", "Gender* (male/female)",
         "Admission Number", "Admission Date* (YYYY-MM-DD)",
         "Class Name", "Address", "State of Origin",
+        "Parent Name", "Parent Email", "Parent Phone",
+        "Relationship", "Primary Guardian", "Finance Access", "Messaging Access",
     ]
     ws.append(headers)
 
@@ -604,12 +614,15 @@ async def bulk_upload_template(
         "2012-03-15", "male",
         "", "2023-09-01",
         "JSS 1A", "12 Lagos Road, Ikeja", "Anambra",
+        "Ada Okafor", "ada@example.com", "08012345678",
+        "mother", "Yes", "Yes", "Yes",
     ])
     ws.append([
         "Amina", "Bello", "",
         "2011-07-22", "female",
         "SCH-2023-0002", "2023-09-01",
         "JSS 2B", "", "Kano",
+        "", "", "", "", "", "", "",
     ])
 
     # Style header row

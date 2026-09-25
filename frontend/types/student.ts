@@ -101,4 +101,8 @@ export interface BulkUploadResult {
   success_count: number;
   error_rows: BulkUploadError[];
   created_students: StudentListItem[];
+  guardian_links_created: number;
+  pending_parent_invitations: number;
+  invitations_dispatched: number;
+  row_results: Array<{ row: number; admission_number: string; status: 'success' | 'error'; student_id?: string; guardian_linked: boolean; reason?: string }>;
 }

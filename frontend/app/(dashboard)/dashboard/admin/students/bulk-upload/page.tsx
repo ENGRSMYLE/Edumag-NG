@@ -28,6 +28,8 @@ const ALL_COLS = [
   'admission_number', 'first_name', 'last_name', 'middle_name',
   'date_of_birth', 'gender', 'class_name', 'state_of_origin',
   'religion', 'blood_group', 'genotype', 'address', 'admission_date',
+  'parent_name', 'parent_email', 'parent_phone', 'relationship',
+  'primary_guardian', 'finance_access', 'messaging_access',
 ];
 
 interface ParsedRow {
@@ -62,6 +64,14 @@ function validateRow(row: Record<string, unknown>, index: number): ParsedRow {
     errors.push('Admission date must be YYYY-MM-DD');
   }
 
+  const parentFields = ['parent_name', 'parent_email', 'parent_phone', 'relationship'];
+  if (parentFields.some((field) => data[field]) && parentFields.some((field) => !data[field])) {
+    errors.push('Parent name, email, phone, and relationship must all be provided');
+  }
+  if (data.relationship && !['father', 'mother', 'guardian', 'other'].includes(data.relationship.toLowerCase())) {
+    errors.push('Relationship must be father, mother, guardian, or other');
+  }
+
   return { index, data, errors };
 }
 
@@ -71,6 +81,7 @@ export default function BulkUploadPage() {
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [fileName, setFileName] = useState('');
   const [result, setResult] = useState<BulkUploadResult | null>(null);
+  const [dispatchInvitations, setDispatchInvitations] = useState(false);
 
   const validRows = parsedRows.filter((r) => r.errors.length === 0);
   const errorRows = parsedRows.filter((r) => r.errors.length > 0);
@@ -122,7 +133,7 @@ export default function BulkUploadPage() {
       // Send every parsed row so the backend remains the source of truth for
       // validation and can preserve the spreadsheet's original row numbers.
       const payload = parsedRows.map((r) => r.data);
-      return studentsApi.bulkUpload(payload as Record<string, unknown>[]);
+      return studentsApi.bulkUpload(payload as Record<string, unknown>[], dispatchInvitations);
     },
     onSuccess: (res) => {
       setResult(res.data);
@@ -426,6 +437,11 @@ export default function BulkUploadPage() {
           )}
 
           <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                <input type="checkbox" checked={dispatchInvitations} onChange={(event) => setDispatchInvitations(event.target.checked)} />
+                Send parent invitations after successful import
+              </label>
             <button
               onClick={() => { setParsedRows([]); setFileName(''); setStep(2); }}
               className={clsx(
@@ -437,6 +453,7 @@ export default function BulkUploadPage() {
             >
               Upload Different File
             </button>
+            </div>
             <button
               onClick={() => submit()}
               disabled={isPending || validRows.length === 0}
@@ -471,6 +488,14 @@ export default function BulkUploadPage() {
                   <>, <span className="font-medium text-red-600">{result.error_rows.length} rows</span> had errors</>
                 )}.
               </p>
+              {result.guardian_links_created > 0 && (
+                <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                  {result.guardian_links_created} guardian links created.{' '}
+                  {result.pending_parent_invitations > 0
+                    ? `${result.pending_parent_invitations} invitations are awaiting administrator review.`
+                    : `${result.invitations_dispatched} invitations were queued after commit.`}
+                </p>
+              )}
             </div>
             <div className="flex gap-3">
               {result.error_rows.length > 0 && (

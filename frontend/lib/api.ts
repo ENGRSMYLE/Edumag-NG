@@ -283,8 +283,8 @@ export const studentsApi = {
   update: (id: string, data: Partial<import('@/types/student').CreateStudentRequest>) =>
     api.patch<Student>(`/students/${id}`, data),
 
-  bulkUpload: (rows: Record<string, unknown>[]) =>
-    api.post<BulkUploadResult>('/students/bulk-upload', { rows }),
+  bulkUpload: (rows: Record<string, unknown>[], dispatchParentInvitations = false) =>
+    api.post<BulkUploadResult>('/students/bulk-upload', { rows, dispatch_parent_invitations: dispatchParentInvitations }),
 
   generateAdmissionNumber: () =>
     api.get<{ admission_number: string }>('/students/generate-admission-number'),
