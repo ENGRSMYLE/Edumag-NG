@@ -54,6 +54,72 @@ async def test_parent_activation_issues_tokens_and_rejects_replay(client, test_e
 
 
 @pytest.mark.asyncio
+async def test_invite_activation_login_and_parent_portal_data_are_connected(client, test_engine) -> None:
+    """Exercise the real HTTP flow from invitation through parent APIs."""
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as db:
+        school, admin, students = await _seed_school(db)
+        invited = await create_or_link_guardian(
+            db, school_id=school.id, actor_user_id=admin.id, payload=_payload(students[0].id)
+        )
+        token = invited.membership.invite_token
+        parent_email = invited.user.email
+        student_id = students[0].id
+        assert school.parent_portal_enabled is True
+
+    activated = await client.post(
+        "/api/auth/set-password",
+        json={"invite_token": token, "new_password": "ParentPass1!"},
+    )
+    assert activated.status_code == 200, activated.text
+
+    profile = await client.get("/api/parents/me")
+    children = await client.get("/api/parents/me/children")
+    assert profile.status_code == 200, profile.text
+    assert profile.json()["email"] == parent_email
+    assert children.status_code == 200, children.text
+    assert children.json()["total"] == 1
+    assert children.json()["items"][0]["id"] == str(student_id)
+
+    await client.post("/api/auth/logout")
+    logged_in = await client.post(
+        "/api/auth/login",
+        json={"email": parent_email, "password": "ParentPass1!"},
+    )
+    assert logged_in.status_code == 200, logged_in.text
+    after_login = await client.get("/api/parents/me/children")
+    assert after_login.status_code == 200
+    assert after_login.json()["items"][0]["id"] == str(student_id)
+
+
+@pytest.mark.asyncio
+async def test_parent_activation_rejects_an_incomplete_student_relationship(client, test_engine) -> None:
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as db:
+        school, admin, students = await _seed_school(db)
+        invited = await create_or_link_guardian(
+            db, school_id=school.id, actor_user_id=admin.id, payload=_payload(students[0].id)
+        )
+        token = invited.membership.invite_token
+        membership_id = invited.membership.id
+        await db.delete(invited.relationship)
+        await db.commit()
+
+    response = await client.post(
+        "/api/auth/set-password",
+        json={"invite_token": token, "new_password": "ParentPass1!"},
+    )
+    assert response.status_code == 409
+    assert "not linked" in response.json()["detail"]
+
+    async with factory() as db:
+        membership = await db.get(SchoolMembership, membership_id)
+        assert membership is not None
+        assert membership.is_active is False
+        assert membership.invite_token == token
+
+
+@pytest.mark.asyncio
 async def test_expired_invite_and_resend_invalidates_old_token(client, test_engine) -> None:
     factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as db:

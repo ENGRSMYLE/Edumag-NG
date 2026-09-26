@@ -16,7 +16,7 @@ import { ParentSidebar } from './ParentSidebar';
 export function ParentShell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { isAuthenticated, role, isLoading, hasHydrated } = useAuth();
+  const { isAuthenticated, role, isLoading, hasHydrated, logout } = useAuth();
   const setUser = useAuthStore((state) => state.setUser);
   const router = useRouter();
 
@@ -46,7 +46,8 @@ export function ParentShell({ children }: { children: ReactNode }) {
   }, [mobileOpen]);
 
   const waiting = !hasHydrated || isLoading || !isAuthenticated || role !== 'parent' || session.isPending;
-  if (waiting || session.isError) return <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-cream)]"><div className="w-7 h-7 rounded-full border-2 border-[var(--color-navy)] border-t-transparent animate-spin" /></div>;
+  if (waiting) return <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-cream)]"><div className="w-7 h-7 rounded-full border-2 border-[var(--color-navy)] border-t-transparent animate-spin" /></div>;
+  if (session.isError) return <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-cream)] p-4"><div className="card-shell w-full max-w-md"><div className="card-core p-6 text-center"><h1 className="font-display text-xl font-semibold text-[var(--color-text-primary)]">We could not load your parent session</h1><p className="mt-2 text-sm text-[var(--color-text-muted)]">Your account may be inactive or the school may need to finish enabling Parent Portal access.</p><div className="mt-5 flex justify-center gap-2"><button type="button" onClick={() => session.refetch()} className="rounded-lg bg-[var(--color-navy)] px-4 py-2 text-sm font-semibold text-white">Try again</button><button type="button" onClick={() => { logout(); router.replace('/login'); }} className="rounded-lg border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-semibold">Sign out</button></div></div></div></div>;
 
   return <div className="min-h-[100dvh] bg-[var(--color-cream)]">
     <div className="hidden lg:block"><ParentSidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} /></div>

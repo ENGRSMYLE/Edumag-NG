@@ -218,6 +218,20 @@ async def create_or_link_guardian(
         if school is None or student is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
 
+        # An invitation is an explicit rollout action for this school. Without
+        # this, onboarding succeeds while every portal endpoint stays blocked
+        # by the feature flag's original false default.
+        if not school.parent_portal_enabled:
+            school.parent_portal_enabled = True
+            db.add(_audit(
+                school_id,
+                actor_user_id,
+                "parent_portal_enabled",
+                "school",
+                school.id,
+                source="parent_invitation",
+            ))
+
         user: User | None = None
         membership: SchoolMembership | None = None
         profile: GuardianProfile | None = None

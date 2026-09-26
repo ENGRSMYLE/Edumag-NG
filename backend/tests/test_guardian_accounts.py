@@ -84,7 +84,7 @@ async def test_new_parent_creation_and_audit(client, test_engine) -> None:
         assert result.invitation_created is True
         assert result.email_task is not None
         assert result.relationship.student_id == students[0].id
-        assert (await db.execute(select(func.count(AuditEvent.id)))).scalar_one() == 5
+        assert (await db.execute(select(func.count(AuditEvent.id)))).scalar_one() == 6
 
 
 @pytest.mark.asyncio

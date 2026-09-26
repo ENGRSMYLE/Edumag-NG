@@ -12,10 +12,11 @@ from app.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.email_verification import EmailVerification
 from app.models.audit_event import AuditEvent
-from app.models.guardian import GuardianProfile, GuardianStatus
+from app.models.guardian import GuardianProfile, GuardianStatus, StudentGuardian
 from app.models.refresh_token import RefreshToken
 from app.models.school import School
 from app.models.school_membership import MembershipRole, SchoolMembership
+from app.models.student import Student
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
@@ -983,13 +984,6 @@ async def set_password(
             detail="Account is disabled",
         )
 
-    if user.is_first_login:
-        user.password_hash = hash_password(body.new_password)
-        user.is_first_login = False
-
-    membership.is_active = True
-    membership.invite_token = None
-    membership.invite_token_expires = None
     if membership.role == MembershipRole.parent:
         guardian_profile = (await db.execute(
             select(GuardianProfile).where(GuardianProfile.membership_id == membership.id)
@@ -999,6 +993,37 @@ async def set_password(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Parent account is missing its guardian profile",
             )
+        relationship_exists = (await db.execute(
+            select(StudentGuardian.id)
+            .join(
+                Student,
+                (Student.id == StudentGuardian.student_id)
+                & (Student.school_id == StudentGuardian.school_id),
+            )
+            .where(
+                StudentGuardian.guardian_profile_id == guardian_profile.id,
+                StudentGuardian.school_id == membership.school_id,
+                StudentGuardian.is_active.is_(True),
+                Student.is_active.is_(True),
+            )
+            .limit(1)
+        )).scalar_one_or_none()
+        if relationship_exists is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Parent invitation is not linked to an active student",
+            )
+
+    # Activate only after the complete parent onboarding chain is valid. The
+    # request transaction is rolled back if any later session operation fails.
+    if user.is_first_login:
+        user.password_hash = hash_password(body.new_password)
+        user.is_first_login = False
+
+    membership.is_active = True
+    membership.invite_token = None
+    membership.invite_token_expires = None
+    if membership.role == MembershipRole.parent:
         guardian_profile.status = GuardianStatus.active
 
     await _revoke_membership_tokens(db, membership.id)

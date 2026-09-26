@@ -35,12 +35,7 @@ async def get_current_parent_context(
     school_id = current_user.current_school_id  # type: ignore[attr-defined]
 
     result = await db.execute(
-        select(SchoolMembership, GuardianProfile, School)
-        .join(
-            GuardianProfile,
-            (GuardianProfile.membership_id == SchoolMembership.id)
-            & (GuardianProfile.school_id == SchoolMembership.school_id),
-        )
+        select(SchoolMembership, School)
         .join(School, School.id == SchoolMembership.school_id)
         .where(
             SchoolMembership.id == membership_id,
@@ -48,7 +43,6 @@ async def get_current_parent_context(
             SchoolMembership.school_id == school_id,
             SchoolMembership.role == MembershipRole.parent,
             SchoolMembership.is_active.is_(True),
-            GuardianProfile.status == GuardianStatus.active,
             School.is_active.is_(True),
         )
         .options(selectinload(SchoolMembership.user))
@@ -60,11 +54,27 @@ async def get_current_parent_context(
             detail="Active parent access is required",
         )
 
-    membership, guardian_profile, school = row
+    membership, school = row
     if not school.parent_portal_enabled and settings.ENVIRONMENT.lower() not in {"test", "testing"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The parent portal is not enabled for this school",
+        )
+    guardian_profile = (await db.execute(
+        select(GuardianProfile).where(
+            GuardianProfile.membership_id == membership.id,
+            GuardianProfile.school_id == membership.school_id,
+        )
+    )).scalar_one_or_none()
+    if guardian_profile is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Parent account is missing its guardian profile",
+        )
+    if guardian_profile.status != GuardianStatus.active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Parent profile is not active",
         )
     return ParentContext(
         user=current_user,
