@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.notification import DomainEventType, Notification, NotificationOutbox, OutboxStatus
-from app.services.notification_outbox import claim_outbox_records, process_outbox_record, retry_delay
+from app.services.notification_outbox import claim_outbox_records, get_outbox_metrics, process_outbox_record, retry_delay
 from app.services.notifications import emit_notifications
 from app.services.push_channel import PushNotificationChannel
 from app.services.push_subscriptions import upsert_push_subscription
@@ -68,6 +68,7 @@ async def test_delivery_is_idempotent_and_stale_lease_is_recoverable(client, tes
             event_type=DomainEventType.student_absent, title="Attendance", body="Update",
         )
         await db.commit()
+        school_id = context.school_id
 
     now = datetime.now(timezone.utc) + timedelta(seconds=1)
     async with factory() as db:
@@ -89,6 +90,10 @@ async def test_delivery_is_idempotent_and_stale_lease_is_recoverable(client, tes
     async with factory() as db:
         duplicate = await process_outbox_record(db, recovered[0], channel=channel, now=now)
         row = (await db.execute(select(NotificationOutbox))).scalar_one()
+        metrics = await get_outbox_metrics(db, school_id=school_id)
     assert status == OutboxStatus.delivered
     assert duplicate is None and calls == 1
     assert row.processed_at == now and row.attempt_count == 2
+    assert metrics["pending_outbox_count"] == 0
+    assert metrics["failed_delivery_count"] == 0
+    assert metrics["active_subscription_count"] == 1

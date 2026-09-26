@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { X, AlertTriangle, AlertCircle, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -41,13 +42,11 @@ export function ConfirmDialog({
     };
 
     document.addEventListener('keydown', handleKeyDown);
-    document.body.style.overflow = 'hidden';
-
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = '';
     };
   }, [isOpen, isLoading, onClose]);
+  useBodyScrollLock(isOpen);
 
   if (!isOpen || !mounted) return null;
 
@@ -57,7 +56,7 @@ export function ConfirmDialog({
   const dialog = (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-modal flex items-center justify-center p-4"
+      className="fixed inset-0 z-modal flex items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4"
       onClick={(e) => {
         if (e.target === backdropRef.current && !isLoading) onClose();
       }}
@@ -77,13 +76,13 @@ export function ConfirmDialog({
         {/* Double-bezel outer shell */}
         <div className="bg-black/[0.03] ring-1 ring-black/5 p-1.5 rounded-[1.25rem]">
           {/* Inner core */}
-          <div className="bg-white rounded-[calc(1.25rem-0.375rem)] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] p-6">
+          <div className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto bg-white rounded-[calc(1.25rem-0.375rem)] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] p-5 sm:p-6">
             {/* Close button */}
             <button
               onClick={onClose}
               disabled={isLoading}
               className={clsx(
-                'absolute top-5 right-5 p-1.5 rounded-lg',
+                'absolute top-3 right-3 flex h-11 w-11 items-center justify-center rounded-lg sm:top-4 sm:right-4',
                 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)]',
                 'transition-all duration-150',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
@@ -127,12 +126,12 @@ export function ConfirmDialog({
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end gap-2 mt-6">
+            <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-end">
               <button
                 onClick={onClose}
                 disabled={isLoading}
                 className={clsx(
-                  'px-4 py-2 rounded-lg text-sm font-medium',
+                  'min-h-11 px-4 py-2 rounded-lg text-sm font-medium',
                   'text-[var(--color-text-primary)] bg-[var(--color-surface)]',
                   'hover:bg-[var(--color-border)] active:scale-[0.98]',
                   'transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
@@ -146,7 +145,7 @@ export function ConfirmDialog({
                 onClick={onConfirm}
                 disabled={isLoading}
                 className={clsx(
-                  'px-4 py-2 rounded-lg text-sm font-medium',
+                  'min-h-11 justify-center px-4 py-2 rounded-lg text-sm font-medium',
                   'flex items-center gap-2',
                   isDanger
                     ? 'bg-red-600 text-white hover:bg-red-700'

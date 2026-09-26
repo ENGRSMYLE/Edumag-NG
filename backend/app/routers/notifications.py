@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.rbac import require_role
 from app.config import settings
 from app.models.notification import DomainEventType, Notification
 from app.models.user import User
@@ -17,6 +18,7 @@ from app.schemas.push_subscription import (
 )
 from app.services.notification_policy import build_push_payload
 from app.services.notifications import emit_notifications
+from app.services.notification_outbox import get_outbox_metrics
 from app.services.push_subscriptions import (
     get_push_subscription_status,
     unsubscribe_push_subscription,
@@ -26,6 +28,22 @@ from app.utils.rate_limit import limiter
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 def _scope(user: User): return (Notification.school_id == user.current_school_id, Notification.user_id == user.id)
+
+
+@router.get("/operations")
+async def notification_operations(
+    user: User = Depends(require_role("super_admin", "admin")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Tenant-scoped delivery health; contains no endpoints or recipient data."""
+    metrics = await get_outbox_metrics(db, school_id=user.current_school_id)  # type: ignore[attr-defined]
+    return {
+        **metrics,
+        "oldest_pending_event": (
+            metrics["oldest_pending_event"].isoformat()
+            if metrics["oldest_pending_event"] else None
+        ),
+    }
 
 
 @router.get("/push/status", response_model=PushSubscriptionStatus)

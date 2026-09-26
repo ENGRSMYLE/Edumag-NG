@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { SuperAdminSidebar } from './SuperAdminSidebar';
 import { DashboardHeader } from './DashboardHeader';
 import { getRoleHome } from '@/lib/roleRouting';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface DashboardShellProps {
   children: ReactNode;
@@ -39,11 +40,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Prevent body scroll when mobile drawer is open
-  useEffect(() => {
-    document.body.style.overflow = mobileOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [mobileOpen]);
+  useBodyScrollLock(mobileOpen);
 
   if (!hasHydrated || isLoading || !isAuthenticated || role !== 'super_admin') {
     return (
@@ -77,7 +74,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
         {/* Drawer */}
         <div
           className={clsx(
-            'fixed inset-y-0 left-0 z-modal w-[260px] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
+            'fixed inset-y-0 left-0 z-modal w-[min(260px,calc(100vw-2rem))] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
@@ -88,13 +85,13 @@ export function DashboardShell({ children }: DashboardShellProps) {
       {/* Page area shifts right on desktop to account for sidebar */}
       <div
         className={clsx(
-          'flex flex-col min-h-[100dvh]',
+          'flex min-w-0 flex-col min-h-[100dvh]',
           'transition-[padding-left] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
           collapsed ? 'lg:pl-[60px]' : 'lg:pl-[260px]',
         )}
       >
         <DashboardHeader onMenuClick={() => setMobileOpen(true)} />
-        <main className="flex-1 p-4 lg:p-6 max-w-[1600px] w-full">
+        <main className="w-full min-w-0 max-w-[1600px] flex-1 p-4 lg:p-6">
           {children}
         </main>
       </div>

@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { AdminSidebar } from './AdminSidebar';
 import { DashboardHeader } from './DashboardHeader';
 import { getRoleHome } from '@/lib/roleRouting';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface AdminShellProps {
   children: ReactNode;
@@ -39,10 +40,7 @@ export function AdminShell({ children }: AdminShellProps) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  useEffect(() => {
-    document.body.style.overflow = mobileOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [mobileOpen]);
+  useBodyScrollLock(mobileOpen);
 
   if (!hasHydrated || isLoading || !isAuthenticated || role !== 'admin') {
     return (
@@ -74,7 +72,7 @@ export function AdminShell({ children }: AdminShellProps) {
         />
         <div
           className={clsx(
-            'fixed inset-y-0 left-0 z-modal w-[260px] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
+            'fixed inset-y-0 left-0 z-modal w-[min(260px,calc(100vw-2rem))] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
@@ -84,13 +82,13 @@ export function AdminShell({ children }: AdminShellProps) {
 
       <div
         className={clsx(
-          'flex flex-col min-h-[100dvh]',
+          'flex min-w-0 flex-col min-h-[100dvh]',
           'transition-[padding-left] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
           collapsed ? 'lg:pl-[60px]' : 'lg:pl-[260px]',
         )}
       >
         <DashboardHeader onMenuClick={() => setMobileOpen(true)} />
-        <main className="flex-1 p-4 lg:p-6 max-w-[1600px] w-full">
+        <main className="w-full min-w-0 max-w-[1600px] flex-1 p-4 lg:p-6">
           {children}
         </main>
       </div>

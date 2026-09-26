@@ -12,6 +12,7 @@ import { getRoleHome } from '@/lib/roleRouting';
 import { useAuthStore } from '@/store/authStore';
 import { ParentHeader } from './ParentHeader';
 import { ParentSidebar } from './ParentSidebar';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export function ParentShell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -44,10 +45,7 @@ export function ParentShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  useEffect(() => {
-    document.body.style.overflow = mobileOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [mobileOpen]);
+  useBodyScrollLock(mobileOpen);
 
   if (sessionEnabled && session.isError) return <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-cream)] p-4"><div className="card-shell w-full max-w-md"><div className="card-core p-6 text-center"><h1 className="font-display text-xl font-semibold text-[var(--color-text-primary)]">We could not load your parent session</h1><p className="mt-2 text-sm text-[var(--color-text-muted)]">The server did not complete the session check. Check your connection and try again, or sign in again.</p><div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row"><button type="button" onClick={() => session.refetch()} disabled={session.isFetching} className="rounded-lg bg-[var(--color-navy)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{session.isFetching ? 'Trying again…' : 'Try again'}</button><button type="button" onClick={() => { logout(); router.replace('/login'); }} className="rounded-lg border border-[var(--color-border)] bg-white px-4 py-2 text-sm font-semibold">Sign in again</button></div></div></div></div>;
 
@@ -55,15 +53,15 @@ export function ParentShell({ children }: { children: ReactNode }) {
   const waitingForSession = sessionEnabled && session.isPending;
   if (waitingForAuth || waitingForSession) return <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-cream)]"><div className="w-7 h-7 rounded-full border-2 border-[var(--color-navy)] border-t-transparent animate-spin" /></div>;
 
-  return <div className="min-h-[100dvh] bg-[var(--color-cream)]">
+  return <div className="min-h-[100dvh] min-w-0 bg-[var(--color-cream)]">
     <div className="hidden lg:block"><ParentSidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} /></div>
     <div className="lg:hidden">
       <div className={clsx('fixed inset-0 z-overlay bg-black/40 transition-opacity duration-300', mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none')} onClick={() => setMobileOpen(false)} aria-hidden="true" />
-      <div className={clsx('fixed inset-y-0 left-0 z-modal w-[260px] transition-transform duration-300', mobileOpen ? 'translate-x-0' : '-translate-x-full')}><ParentSidebar collapsed={false} onToggle={() => setMobileOpen(false)} onClose={() => setMobileOpen(false)} /></div>
+      <div className={clsx('fixed inset-y-0 left-0 z-modal w-[min(260px,calc(100vw-2rem))] transition-transform duration-300', mobileOpen ? 'translate-x-0' : '-translate-x-full')}><ParentSidebar collapsed={false} onToggle={() => setMobileOpen(false)} onClose={() => setMobileOpen(false)} /></div>
     </div>
-    <div className={clsx('flex flex-col min-h-[100dvh] transition-[padding-left] duration-300', collapsed ? 'lg:pl-[60px]' : 'lg:pl-[260px]')}>
+    <div className={clsx('flex min-h-[100dvh] min-w-0 flex-col transition-[padding-left] duration-300', collapsed ? 'lg:pl-[60px]' : 'lg:pl-[260px]')}>
       <ParentHeader onMenuClick={() => setMobileOpen(true)} />
-      <main className="flex-1 p-4 lg:p-6 max-w-[1600px] w-full">{children}</main>
+      <main className="w-full min-w-0 max-w-[1600px] flex-1 p-4 lg:p-6">{children}</main>
     </div>
   </div>;
 }

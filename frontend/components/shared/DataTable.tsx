@@ -122,8 +122,8 @@ export function DataTable<T extends object>({
       )}
 
       {/* Table shell — scrolls horizontally on small screens */}
-      <div className="rounded-xl border border-[var(--color-border)] overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-[var(--color-border)]">
+        <div className="max-w-full overflow-x-auto overscroll-x-contain" tabIndex={0} aria-label="Scrollable data table">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-[var(--color-navy)]">
@@ -247,7 +247,7 @@ export function DataTable<T extends object>({
               onClick={() => onPageChange(page - 1)}
               disabled={page <= 1}
               className={clsx(
-                'p-1.5 rounded-lg transition-all duration-150',
+                'flex h-11 w-11 items-center justify-center rounded-lg transition-all duration-150 sm:h-9 sm:w-9',
                 page <= 1
                   ? 'text-[var(--color-text-muted)] cursor-not-allowed opacity-40'
                   : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] active:scale-95 cursor-pointer',
@@ -263,7 +263,7 @@ export function DataTable<T extends object>({
                 key={num}
                 onClick={() => onPageChange(num)}
                 className={clsx(
-                  'w-8 h-8 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer',
+                  'h-11 w-11 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer sm:h-8 sm:w-8',
                   Math.abs(num - page) > 1 && 'hidden sm:flex sm:items-center sm:justify-center',
                   num === page
                     ? 'bg-[var(--color-navy)] text-white'
@@ -278,7 +278,7 @@ export function DataTable<T extends object>({
               onClick={() => onPageChange(page + 1)}
               disabled={page >= totalPages}
               className={clsx(
-                'p-1.5 rounded-lg transition-all duration-150',
+                'flex h-11 w-11 items-center justify-center rounded-lg transition-all duration-150 sm:h-9 sm:w-9',
                 page >= totalPages
                   ? 'text-[var(--color-text-muted)] cursor-not-allowed opacity-40'
                   : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] active:scale-95 cursor-pointer',

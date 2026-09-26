@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { X, UserPlus, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 
@@ -101,12 +102,11 @@ export function InviteUserModal({
       if (e.key === 'Escape' && !isPending) onClose();
     };
     document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
     };
   }, [isOpen, isPending, onClose]);
+  useBodyScrollLock(isOpen);
 
   useEffect(() => {
     if (!isOpen) reset();
@@ -129,7 +129,7 @@ export function InviteUserModal({
 
   const modal = (
     <div
-      className="fixed inset-0 z-modal flex items-center justify-center p-4"
+      className="fixed inset-0 z-modal flex items-end justify-center p-0 sm:items-center sm:p-4"
       onClick={(e) => {
         if (e.currentTarget === e.target && !isPending) onClose();
       }}
@@ -139,14 +139,14 @@ export function InviteUserModal({
 
       {/* Panel */}
       <div
-        className="relative z-10 w-full max-w-lg animate-fade-in-up"
+        className="relative z-10 max-h-[100dvh] w-full max-w-lg overflow-y-auto animate-fade-in-up sm:max-h-[calc(100dvh-2rem)]"
         style={{ '--delay': '0ms' } as unknown as CSSProperties}
         role="dialog"
         aria-modal="true"
         aria-labelledby="invite-modal-title"
       >
         {/* Double-bezel outer shell */}
-        <div className="bg-black/[0.03] ring-1 ring-black/5 p-1.5 rounded-[1.25rem]">
+        <div className="rounded-t-[1.25rem] bg-black/[0.03] p-1.5 ring-1 ring-black/5 sm:rounded-[1.25rem]">
           {/* Inner core */}
           <div className="bg-white rounded-[calc(1.25rem-0.375rem)] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
             {/* Header */}

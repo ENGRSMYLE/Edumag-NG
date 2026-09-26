@@ -56,6 +56,8 @@
 }
 
 html {
+  width: 100%;
+  max-width: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -69,11 +71,59 @@ html {
 }
 
 body {
+  width: 100%;
+  max-width: 100%;
   font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
   background-color: var(--color-cream);
   color: var(--color-text-primary);
   line-height: 1.6;
   min-height: 100dvh;
+  overflow-wrap: break-word;
+  scrollbar-gutter: stable;
+}
+
+img,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* Shared field primitive used throughout forms. Mobile controls deliberately
+   remain 16px to prevent iOS Safari from zooming the page on focus. */
+.input-base {
+  display: block;
+  min-height: 2.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.625rem;
+  background: var(--color-white);
+  padding: 0.625rem 0.75rem;
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.input-base::placeholder {
+  color: var(--color-text-muted);
+}
+
+.input-base:focus {
+  border-color: var(--color-gold);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(245 166 35 / 0.18);
+}
+
+@media (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .input-base {
+    font-size: 0.875rem;
+  }
 }
 
 /* ─── Typography utilities ────────────────────────────────────────────────── */

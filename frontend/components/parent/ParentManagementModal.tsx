@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { parentsApi, studentsApi } from '@/lib/api';
 import type { ParentListItem, CreateParentRequest } from '@/types/parent';
 import type { StudentListItem } from '@/types/student';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 const PERMISSIONS = [
   ['can_receive_messages', 'Receive school messages'],
@@ -20,7 +21,7 @@ const PERMISSIONS = [
 ] as const;
 
 const inputCx = clsx(
-  'input-base w-full px-3 py-2.5 text-sm rounded-lg',
+  'input-base w-full px-3 py-2.5 rounded-lg',
   'bg-[var(--color-surface)] border border-[var(--color-border)]',
   'focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)]/30 focus:border-[var(--color-gold)]',
   'transition-all duration-150',
@@ -31,18 +32,19 @@ function Frame({ title, description, icon: Icon, onClose, busy = false, children
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) onClose(); };
-    document.addEventListener('keydown', key); document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', key); document.body.style.overflow = ''; };
+    document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('keydown', key); };
   }, [busy, onClose]);
+  useBodyScrollLock(true);
   if (!mounted) return null;
-  return createPortal(<div className="fixed inset-0 z-modal flex items-center justify-center p-3 sm:p-5" onMouseDown={event => { if (event.currentTarget === event.target && !busy) onClose(); }}>
+  return createPortal(<div className="fixed inset-0 z-modal flex items-end justify-center p-0 sm:items-center sm:p-5" onMouseDown={event => { if (event.currentTarget === event.target && !busy) onClose(); }}>
     <div className="absolute inset-0 bg-[var(--color-navy)]/60 backdrop-blur-sm" />
-    <div role="dialog" aria-modal="true" aria-labelledby="parent-modal-title" className="relative z-10 max-h-[94dvh] w-full max-w-3xl overflow-hidden rounded-[1.25rem] bg-black/[0.03] p-1.5 ring-1 ring-black/5 animate-fade-in-up">
-      <div className="flex max-h-[calc(94dvh-12px)] flex-col overflow-hidden rounded-[calc(1.25rem-0.375rem)] bg-white shadow-2xl">
+    <div role="dialog" aria-modal="true" aria-labelledby="parent-modal-title" className="relative z-10 max-h-[100dvh] w-full max-w-3xl overflow-hidden rounded-t-[1.25rem] bg-black/[0.03] p-1.5 ring-1 ring-black/5 animate-fade-in-up sm:max-h-[94dvh] sm:rounded-[1.25rem]">
+      <div className="flex max-h-[calc(100dvh-6px)] flex-col overflow-hidden rounded-t-[calc(1.25rem-0.375rem)] bg-white shadow-2xl sm:max-h-[calc(94dvh-12px)] sm:rounded-[calc(1.25rem-0.375rem)]">
         <header className="flex items-start gap-3 border-b border-[var(--color-border)] px-5 py-4 sm:px-6">
           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--color-navy)]/10"><Icon className="h-[18px] w-[18px] text-[var(--color-navy)]" strokeWidth={1.5} /></div>
           <div className="min-w-0 flex-1"><h2 id="parent-modal-title" className="font-display text-base font-semibold text-[var(--color-text-primary)]">{title}</h2>{description && <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{description}</p>}</div>
-          <button type="button" onClick={onClose} disabled={busy} className="rounded-lg p-1.5 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface)] disabled:opacity-40" aria-label="Close"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} disabled={busy} className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface)] disabled:opacity-40" aria-label="Close"><X className="h-5 w-5" /></button>
         </header>
         <div className="overflow-y-auto">{children}</div>
       </div>
@@ -79,7 +81,7 @@ export function InviteParentModal({ onClose, initialStudentId = '' }: { onClose:
     <form onSubmit={submit} className="flex flex-col">
       <section className="border-b border-[var(--color-border)] px-5 py-5 sm:px-6"><div className="mb-3 flex items-center gap-2"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-navy)] text-[10px] font-bold text-white">1</span><h3 className="text-sm font-semibold">Find and select student</h3></div>
         {selectedStudent ? <div><StudentCard student={selectedStudent} selected onSelect={() => undefined} />{!initialStudentId && <button type="button" onClick={() => { setSelectedStudent(null); set('student_id', ''); setSearch(''); }} className="mt-2 text-xs font-semibold text-[var(--color-navy)] hover:underline">Choose a different student</button>}</div> : <>
-          <div className="relative"><Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" /><input autoFocus value={search} onChange={event => setSearch(event.target.value)} className={clsx(inputCx, 'pl-10')} placeholder="Search by full name or admission number" aria-label="Find student" /></div>
+          <div className="relative"><Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" /><input value={search} onChange={event => setSearch(event.target.value)} className={clsx(inputCx, 'pl-10')} placeholder="Search by full name or admission number" aria-label="Find student" /></div>
           <div className="mt-3 min-h-16">{search.trim().length < 2 ? <p className="rounded-lg bg-[var(--color-surface)] px-3 py-3 text-xs text-[var(--color-text-muted)]">Enter at least two characters. You can use a first name, surname, full name, or admission number.</p> : students.isLoading || students.isFetching ? <div className="flex items-center justify-center gap-2 py-5 text-sm text-[var(--color-text-muted)]"><Loader2 className="h-4 w-4 animate-spin" />Searching students…</div> : students.isError ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Student search failed. <button type="button" onClick={() => students.refetch()} className="font-semibold underline">Try again</button></div> : students.data?.items.length ? <div className="grid max-h-56 gap-2 overflow-y-auto pr-1">{students.data.items.map(student => <StudentCard key={student.id} student={student} selected={false} onSelect={() => chooseStudent(student)} />)}</div> : <div className="rounded-lg border border-dashed border-[var(--color-border)] p-5 text-center"><p className="text-sm font-medium">No matching students</p><p className="mt-1 text-xs text-[var(--color-text-muted)]">Check the spelling or try the admission number.</p></div>}</div>
         </>}
       </section>

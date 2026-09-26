@@ -122,7 +122,18 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
       }
     };
     document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
+    const reposition = () => {
+      const rect = avatarRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setDropdownPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
+    };
+    window.addEventListener('resize', reposition);
+    window.visualViewport?.addEventListener('resize', reposition);
+    return () => {
+      document.removeEventListener('mousedown', handle);
+      window.removeEventListener('resize', reposition);
+      window.visualViewport?.removeEventListener('resize', reposition);
+    };
   }, [dropdownOpen]);
 
   const openDropdown = () => {
@@ -130,7 +141,7 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
       const rect = avatarRef.current.getBoundingClientRect();
       setDropdownPos({
         top: rect.bottom + 8,
-        right: window.innerWidth - rect.right,
+        right: Math.max(8, window.innerWidth - rect.right),
       });
     }
     setDropdownOpen((o) => !o);
@@ -169,11 +180,11 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   }, [isSwitching, user?.membership_id, switchSchoolStore]);
 
   return (
-    <header className="h-16 bg-white border-b border-[var(--color-border)] flex items-center px-4 lg:px-6 gap-3 sticky top-0 z-nav flex-shrink-0">
+    <header className="sticky top-0 z-nav flex h-16 min-w-0 flex-shrink-0 items-center gap-2 border-b border-[var(--color-border)] bg-white px-3 sm:gap-3 sm:px-4 lg:px-6">
       {/* Mobile hamburger */}
       <button
         onClick={onMenuClick}
-        className="lg:hidden p-2 -ml-1 rounded-lg text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)] transition-all duration-150 cursor-pointer"
+        className="-ml-1 flex h-11 w-11 items-center justify-center rounded-lg text-[var(--color-text-muted)] transition-all duration-150 hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)] lg:hidden"
         aria-label="Open menu"
       >
         <Menu className="w-5 h-5" strokeWidth={1.5} />
@@ -196,7 +207,7 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
       {/* Right controls */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <button
-          className="relative p-2 rounded-lg text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)] transition-all duration-150 cursor-pointer"
+          className="relative flex h-11 w-11 items-center justify-center rounded-lg text-[var(--color-text-muted)] transition-all duration-150 hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)]"
           aria-label="Notifications"
         >
           <Bell className="w-[18px] h-[18px]" strokeWidth={1.5} />
@@ -221,7 +232,7 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
         <button
           ref={avatarRef}
           onClick={openDropdown}
-          className="flex items-center gap-2 cursor-pointer p-1 rounded-full hover:ring-2 hover:ring-[var(--color-gold)]/30 transition-all duration-150"
+          className="flex h-11 w-11 items-center justify-center rounded-full transition-all duration-150 hover:ring-2 hover:ring-[var(--color-gold)]/30"
           aria-label="Account menu"
           aria-expanded={dropdownOpen}
           aria-haspopup="true"
@@ -248,8 +259,8 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
         createPortal(
           <div
             ref={dropdownRef}
-            className="fixed z-tooltip bg-white rounded-xl border border-[var(--color-border)] shadow-dropdown overflow-hidden animate-fade-in"
-            style={{ top: dropdownPos.top, right: dropdownPos.right, width: 224 }}
+            className="fixed z-tooltip max-h-[calc(100dvh-5rem)] w-[min(224px,calc(100vw-1rem))] overflow-y-auto rounded-xl border border-[var(--color-border)] bg-white shadow-dropdown animate-fade-in"
+            style={{ top: dropdownPos.top, right: dropdownPos.right }}
             role="menu"
           >
             {!showSchools ? (

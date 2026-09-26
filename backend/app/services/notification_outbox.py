@@ -4,18 +4,51 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.notification import Notification, NotificationChannel, NotificationOutbox, OutboxStatus
+from app.models.push_subscription import PushSubscription
 from app.services.push_channel import DeliveryDisposition, PushDeliveryResult, PushNotificationChannel, deliver_notification_push
 
 
 def retry_delay(attempt_count: int, *, base_seconds: int, maximum_seconds: int) -> timedelta:
     exponent = max(attempt_count - 1, 0)
     return timedelta(seconds=min(base_seconds * (2 ** exponent), maximum_seconds))
+
+
+async def get_outbox_metrics(db: AsyncSession, *, school_id=None) -> dict:
+    notification_scope = []
+    subscription_scope = []
+    if school_id is not None:
+        notification_scope.append(Notification.school_id == school_id)
+        subscription_scope.append(PushSubscription.school_id == school_id)
+
+    pending_filter = NotificationOutbox.status.in_([
+        OutboxStatus.pending, OutboxStatus.retry, OutboxStatus.processing,
+    ])
+    pending_query = select(func.count(NotificationOutbox.id), func.min(NotificationOutbox.created_at)).join(
+        Notification, Notification.id == NotificationOutbox.notification_id,
+    ).where(pending_filter, *notification_scope)
+    pending_count, oldest_pending = (await db.execute(pending_query)).one()
+    failed_count = (await db.execute(
+        select(func.count(NotificationOutbox.id)).join(
+            Notification, Notification.id == NotificationOutbox.notification_id,
+        ).where(NotificationOutbox.status == OutboxStatus.failed, *notification_scope)
+    )).scalar_one()
+    active_subscriptions = (await db.execute(
+        select(func.count(PushSubscription.id)).where(
+            PushSubscription.is_active.is_(True), *subscription_scope,
+        )
+    )).scalar_one()
+    return {
+        "pending_outbox_count": pending_count,
+        "failed_delivery_count": failed_count,
+        "oldest_pending_event": oldest_pending,
+        "active_subscription_count": active_subscriptions,
+    }
 
 
 async def claim_outbox_records(

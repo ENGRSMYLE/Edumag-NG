@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import {
   Bricolage_Grotesque,
   DM_Sans,
@@ -47,6 +47,13 @@ export const metadata: Metadata = {
     ],
     apple: '/icons/icon-192.png',
   },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#0A1628',
 };
 
 export default function RootLayout({
