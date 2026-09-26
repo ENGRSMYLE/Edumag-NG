@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import Image from 'next/image';
 import { getInitials } from '@/lib/formatters';
 
 export interface SchoolSwitchOverlayProps {
@@ -104,9 +105,11 @@ export function SchoolSwitchOverlay({
               transition={{ type: 'spring', stiffness: 400, damping: 20, delay: 0.4 }}
             >
               {schoolLogo ? (
-                <img
+                <Image
                   src={schoolLogo}
                   alt={schoolName}
+                  width={72}
+                  height={72}
                   className="w-[72px] h-[72px] rounded-full object-contain border-[3px] border-[var(--color-gold)]"
                 />
               ) : (

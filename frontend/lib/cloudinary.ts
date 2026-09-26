@@ -18,8 +18,14 @@ export async function uploadToCloudinary(
   );
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error((err as any)?.error?.message ?? 'Upload failed');
+    const err: unknown = await response.json().catch(() => ({}));
+    const message =
+      typeof err === 'object' && err !== null && 'error' in err
+        && typeof err.error === 'object' && err.error !== null && 'message' in err.error
+        && typeof err.error.message === 'string'
+          ? err.error.message
+          : 'Upload failed';
+    throw new Error(message);
   }
 
   const data = await response.json();

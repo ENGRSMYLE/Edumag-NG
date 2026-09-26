@@ -26,8 +26,6 @@ import type {
   RecordPaymentRequest,
   DebtorListItem,
   DebtorListParams,
-  ResultListItem,
-  ResultListParams,
   SchoolSettings,
   GradeScale,
   AcademicTerm,
@@ -64,6 +62,7 @@ import type {
   AssignmentListParams,
 } from '@/types/assignment';
 import type { AppNotification, NotificationPage } from '@/types/notification';
+import { useAuthStore } from '@/store/authStore';
 
 // ---------------------------------------------------------------------------
 // Axios instance
@@ -80,8 +79,6 @@ const api = axios.create({
 // ---------------------------------------------------------------------------
 
 api.interceptors.request.use((config) => {
-  // Lazy-import avoids a circular dependency at module evaluation time
-  const { useAuthStore } = require('@/store/authStore');
   const token: string | null = useAuthStore.getState().accessToken;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -122,9 +119,12 @@ api.interceptors.response.use(
 
     // ── 403: Password change required ──────────────────────────────────────
     if (error.response?.status === 403) {
-      const detail = (error.response.data as any)?.detail;
+      const responseData = error.response.data as { detail?: unknown } | undefined;
+      const detail = responseData?.detail;
       const code =
-        typeof detail === 'object' ? detail?.code : null;
+        typeof detail === 'object' && detail !== null && 'code' in detail
+          ? (detail as { code?: unknown }).code
+          : null;
       if (code === 'PASSWORD_CHANGE_REQUIRED') {
         if (typeof window !== 'undefined') {
           window.location.href = '/set-password';
@@ -167,7 +167,6 @@ api.interceptors.response.use(
       );
 
       const newToken = data.access_token;
-      const { useAuthStore } = require('@/store/authStore');
       useAuthStore.getState().login(data);
 
       drainQueue(newToken);
@@ -184,7 +183,6 @@ api.interceptors.response.use(
 );
 
 function _forceLogout() {
-  const { useAuthStore } = require('@/store/authStore');
   useAuthStore.getState().logout();
   if (typeof window !== 'undefined') {
     window.location.href = '/login';

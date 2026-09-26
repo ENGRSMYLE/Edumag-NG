@@ -75,7 +75,7 @@ export function InviteUserModal({
     staleTime: 120_000,
     enabled: isOpen && role === 'teacher',
   });
-  const classes = (classesData as any)?.items ?? [];
+  const classes = classesData?.items ?? [];
 
   const { mutate: invite, isPending } = useMutation({
     mutationFn: (data: InviteUserRequest) =>
@@ -165,7 +165,7 @@ export function InviteUserModal({
                   Invite Staff Member
                 </h2>
                 <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                  They'll receive an email with an account setup link.
+                  They&apos;ll receive an email with an account setup link.
                 </p>
               </div>
               <button
@@ -250,7 +250,7 @@ export function InviteUserModal({
                     className={clsx(inputCx(!!errors.class_id), 'cursor-pointer')}
                   >
                     <option value="">Select a class…</option>
-                    {classes.map((cls: any) => (
+                    {classes.map((cls) => (
                       <option key={cls.id} value={cls.id}>
                         {cls.name}{cls.arm ? ` (${cls.arm})` : ''} — {cls.academic_session}
                       </option>
