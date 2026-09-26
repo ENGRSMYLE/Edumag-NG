@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test:pwa": "node tests/run-pwa-tests.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

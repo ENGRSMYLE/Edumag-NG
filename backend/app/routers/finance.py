@@ -22,10 +22,13 @@ from app.dependencies.rbac import require_permission
 from app.models.finance import Payment, PaymentStatus
 from app.models.student import Student
 from app.models.user import User
+from app.models.notification import DomainEventType
 from app.schemas.finance import (
     ConfirmPaymentRequest,
     DebtorResponse,
     FinancialSummary,
+    FeeReminderRequest,
+    FeeReminderResponse,
     InitializePaystackRequest,
     InitializePaystackResponse,
     PaginatedDebtorResponse,
@@ -41,6 +44,7 @@ from app.services.finance_service import (
     verify_paystack_signature,
 )
 from app.config import settings
+from app.services.notifications import notify_student_event
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +55,36 @@ router = APIRouter(prefix="/finance", tags=["finance"])
 # ---------------------------------------------------------------------------
 
 _DEFAULT_FEE_KOBO = 50_000_00  # ₦50,000 in kobo — used when school has no fee config
+
+
+@router.post("/fee-reminders", response_model=FeeReminderResponse)
+async def send_fee_reminders(
+    body: FeeReminderRequest,
+    current_user: User = Depends(require_permission("track_debtors")),
+    db: AsyncSession = Depends(get_db),
+) -> FeeReminderResponse:
+    """Queue privacy-safe reminders for authorized guardians in one transaction."""
+    school_id: uuid.UUID = current_user.current_school_id  # type: ignore[assignment]
+    requested = set(body.student_ids)
+    valid = set((await db.execute(select(Student.id).where(
+        Student.id.in_(requested),
+        Student.school_id == school_id,
+        Student.is_active.is_(True),
+    ))).scalars().all())
+    if valid != requested:
+        raise HTTPException(status_code=404, detail="One or more students were not found")
+
+    notifications = await notify_student_event(
+        db,
+        school_id=school_id,
+        student_ids=valid,
+        event_type=DomainEventType.fee_reminder,
+        title="Fee reminder",
+        body="A school fee reminder is available in the parent portal.",
+        data={"academic_session": body.academic_session, "term": body.term.value},
+    )
+    await db.commit()
+    return FeeReminderResponse(student_count=len(valid), recipient_count=len(notifications))
 
 
 def _payment_response(p: Payment) -> PaymentResponse:

@@ -20,6 +20,8 @@ from app.models.assignment import Assignment, AssignmentSubmission
 from app.models.class_ import Class
 from app.models.student import Student
 from app.models.user import User
+from app.models.notification import DomainEventType
+from app.services.notifications import notify_student_event
 from app.schemas.assignment import (
     AssignmentCreate,
     AssignmentResponse,
@@ -150,6 +152,21 @@ async def create_assignment(
     )
     db.add(assignment)
     await db.flush()
+
+    student_ids = set((await db.execute(select(Student.id).where(
+        Student.school_id == school_id,
+        Student.class_id == body.class_id,
+        Student.is_active.is_(True),
+    ))).scalars().all())
+    await notify_student_event(
+        db,
+        school_id=school_id,
+        student_ids=student_ids,
+        event_type=DomainEventType.assignment_created,
+        title="New assignment",
+        body=f"A new {body.subject} assignment is available.",
+        data={"assignment_id": str(assignment.id), "class_id": str(body.class_id)},
+    )
 
     a = await _get_assignment_or_404(db, assignment.id, school_id)
     await db.commit()

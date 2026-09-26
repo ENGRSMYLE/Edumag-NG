@@ -8,3 +8,15 @@ export interface PushSubscriptionRequest {
   device_name?: string;
 }
 export interface PushTestResponse { message: string; notification_id: string }
+export interface NotificationPreference {
+  event_type: NotificationEventType;
+  in_app_enabled: boolean;
+  push_enabled: boolean;
+  email_enabled: boolean;
+  sms_enabled: boolean;
+  whatsapp_enabled: boolean;
+  mandatory: boolean;
+}
+export interface NotificationPreferenceList { items: NotificationPreference[] }
+export type NotificationPreferenceUpdate = Partial<Pick<NotificationPreference,
+  'in_app_enabled' | 'push_enabled' | 'email_enabled' | 'sms_enabled' | 'whatsapp_enabled'>>;

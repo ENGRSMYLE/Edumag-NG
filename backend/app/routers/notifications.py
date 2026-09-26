@@ -9,7 +9,14 @@ from app.dependencies.rbac import require_role
 from app.config import settings
 from app.models.notification import DomainEventType, Notification
 from app.models.user import User
-from app.schemas.notification import NotificationPage, NotificationResponse, NotificationUnreadCount
+from app.schemas.notification import (
+    NotificationPage,
+    NotificationPreferenceList,
+    NotificationPreferenceResponse,
+    NotificationPreferenceUpdate,
+    NotificationResponse,
+    NotificationUnreadCount,
+)
 from app.schemas.push_subscription import (
     PushSubscriptionRequest,
     PushSubscriptionStatus,
@@ -19,6 +26,7 @@ from app.schemas.push_subscription import (
 from app.services.notification_policy import build_push_payload
 from app.services.notifications import emit_notifications
 from app.services.notification_outbox import get_outbox_metrics
+from app.services.notification_preferences import list_effective_preferences, update_preference
 from app.services.push_subscriptions import (
     get_push_subscription_status,
     unsubscribe_push_subscription,
@@ -134,25 +142,65 @@ async def test_push(
         title=payload.title,
         body=payload.body,
         data={"url": payload.url, "test": True},
+        respect_preferences=False,
     )
     await db.commit()
     return PushTestResponse(message="Test notification queued", notification_id=str(notifications[0].id))
 
 @router.get("", response_model=NotificationPage)
 async def list_notifications(page: int = Query(1, ge=1), per_page: int = Query(20, ge=1, le=100), unread_only: bool = False, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    filters = list(_scope(user))
+    filters = [*_scope(user), Notification.is_in_app_visible.is_(True)]
     if unread_only: filters.append(Notification.is_read.is_(False))
     total = (await db.execute(select(func.count(Notification.id)).where(*filters))).scalar_one()
-    unread = (await db.execute(select(func.count(Notification.id)).where(*_scope(user), Notification.is_read.is_(False)))).scalar_one()
+    unread = (await db.execute(select(func.count(Notification.id)).where(*_scope(user), Notification.is_in_app_visible.is_(True), Notification.is_read.is_(False)))).scalar_one()
     items = list((await db.execute(select(Notification).where(*filters).order_by(Notification.created_at.desc()).offset((page - 1) * per_page).limit(per_page))).scalars().all())
     return NotificationPage(items=items, total=total, page=page, per_page=per_page, unread_count=unread)
 
 @router.get("/unread-count", response_model=NotificationUnreadCount)
 async def unread_count(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    return NotificationUnreadCount(count=(await db.execute(select(func.count(Notification.id)).where(*_scope(user), Notification.is_read.is_(False)))).scalar_one())
+    return NotificationUnreadCount(count=(await db.execute(select(func.count(Notification.id)).where(*_scope(user), Notification.is_in_app_visible.is_(True), Notification.is_read.is_(False)))).scalar_one())
+
+
+@router.get("/preferences", response_model=NotificationPreferenceList)
+async def get_preferences(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> NotificationPreferenceList:
+    items = await list_effective_preferences(
+        db,
+        user_id=user.id,
+        school_id=user.current_school_id,  # type: ignore[attr-defined]
+        role=user.current_role,  # type: ignore[attr-defined]
+    )
+    return NotificationPreferenceList(items=[NotificationPreferenceResponse(**item.__dict__) for item in items])
+
+
+@router.patch("/preferences/{event_type}", response_model=NotificationPreferenceResponse)
+async def patch_preference(
+    event_type: DomainEventType,
+    body: NotificationPreferenceUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> NotificationPreferenceResponse:
+    values = body.model_dump(exclude_none=True)
+    if not values:
+        raise HTTPException(status_code=422, detail="Provide at least one preference")
+    try:
+        item = await update_preference(
+            db,
+            user_id=user.id,
+            school_id=user.current_school_id,  # type: ignore[attr-defined]
+            role=user.current_role,  # type: ignore[attr-defined]
+            event_type=event_type,
+            values=values,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    await db.commit()
+    return NotificationPreferenceResponse(**item.__dict__)
 
 @router.patch("/{notification_id}/read", response_model=NotificationResponse)
 async def mark_read(notification_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    item = (await db.execute(select(Notification).where(Notification.id == notification_id, *_scope(user)))).scalar_one_or_none()
+    item = (await db.execute(select(Notification).where(Notification.id == notification_id, Notification.is_in_app_visible.is_(True), *_scope(user)))).scalar_one_or_none()
     if item is None: raise HTTPException(status_code=404, detail="Notification not found")
     item.is_read = True; item.read_at = datetime.now(timezone.utc); await db.commit(); return item

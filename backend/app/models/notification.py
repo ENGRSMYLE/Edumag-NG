@@ -36,9 +36,39 @@ class Notification(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    is_in_app_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+    __table_args__ = (
+        UniqueConstraint("user_id", "school_id", "event_type", name="uq_notification_preference_user_school_event"),
+        Index("ix_notification_preferences_user_school", "user_id", "school_id"),
+        Index("ix_notification_preferences_school_event", "school_id", "event_type"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    school_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("schools.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[DomainEventType] = mapped_column(
+        Enum(DomainEventType, name="domain_event_type_enum", create_type=False), nullable=False
+    )
+    in_app_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    push_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    email_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    sms_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    whatsapp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
 class NotificationOutbox(Base):
     __tablename__ = "notification_outbox"

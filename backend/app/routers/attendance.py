@@ -20,6 +20,8 @@ from app.models.attendance import Attendance, AttendanceStatus
 from app.models.class_ import Class
 from app.models.student import Student
 from app.models.user import User
+from app.models.notification import DomainEventType
+from app.services.notifications import notify_student_event
 from app.schemas.attendance import (
     AttendanceResponse,
     AttendanceSummary,
@@ -130,6 +132,14 @@ async def mark_attendance(
             detail=f"Students not in this class: {invalid}",
         )
 
+    previously_absent_ids = set((await db.execute(select(Attendance.student_id).where(
+        Attendance.school_id == school_id,
+        Attendance.class_id == payload.class_id,
+        Attendance.date == payload.date,
+        Attendance.student_id.in_(student_ids),
+        Attendance.status == AttendanceStatus.absent,
+    ))).scalars().all())
+
     # Batch upsert all records in one statement
     values = [
         {
@@ -155,6 +165,21 @@ async def mark_attendance(
         },
     )
     await db.execute(upsert_stmt)
+    absent_ids = {
+        rec.student_id
+        for rec in payload.records
+        if rec.status.value == "absent" and rec.student_id not in previously_absent_ids
+    }
+    if absent_ids:
+        await notify_student_event(
+            db,
+            school_id=school_id,
+            student_ids=absent_ids,
+            event_type=DomainEventType.student_absent,
+            title="Attendance alert",
+            body="A student attendance record was marked absent.",
+            data={"date": payload.date.isoformat(), "class_id": str(payload.class_id)},
+        )
     await db.commit()
 
     return MarkAttendanceResponse(

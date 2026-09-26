@@ -61,7 +61,7 @@ import type {
   GradeSubmissionRequest,
   AssignmentListParams,
 } from '@/types/assignment';
-import type { AppNotification, NotificationPage, PushSubscriptionRequest, PushSubscriptionStatus, PushTestResponse } from '@/types/notification';
+import type { AppNotification, NotificationPage, NotificationPreference, NotificationPreferenceList, NotificationPreferenceUpdate, PushSubscriptionRequest, PushSubscriptionStatus, PushTestResponse } from '@/types/notification';
 import { useAuthStore } from '@/store/authStore';
 
 // ---------------------------------------------------------------------------
@@ -372,6 +372,9 @@ export const notificationsApi = {
   subscribePush: (subscription: PushSubscriptionRequest) => api.post<PushSubscriptionStatus>('/notifications/push/subscribe', subscription),
   unsubscribePush: (endpoint: string) => api.delete<PushSubscriptionStatus>('/notifications/push/unsubscribe', { data: { endpoint } }),
   testPush: () => api.post<PushTestResponse>('/notifications/push/test'),
+  preferences: () => api.get<NotificationPreferenceList>('/notifications/preferences'),
+  updatePreference: (eventType: string, body: NotificationPreferenceUpdate) =>
+    api.patch<NotificationPreference>(`/notifications/preferences/${eventType}`, body),
 };
 
 // ---------------------------------------------------------------------------

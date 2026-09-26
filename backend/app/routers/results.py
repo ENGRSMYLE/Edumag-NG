@@ -19,6 +19,8 @@ from app.models.class_ import Class
 from app.models.result import Result
 from app.models.student import Student
 from app.models.user import User
+from app.models.notification import DomainEventType
+from app.services.notifications import notify_student_event
 from app.schemas.result import (
     AddCommentRequest,
     ApproveResultsRequest,
@@ -194,6 +196,16 @@ async def approve_results(
 
     await _get_class_or_404(payload.class_id, school_id, db)
 
+    student_ids = set((await db.execute(
+        select(Result.student_id).where(
+            Result.school_id == school_id,
+            Result.class_id == payload.class_id,
+            Result.academic_session == payload.academic_session,
+            Result.term == payload.term,
+            Result.is_approved.is_(False),
+        ).distinct()
+    )).scalars().all())
+
     result = await db.execute(
         update(Result)
         .where(
@@ -204,6 +216,19 @@ async def approve_results(
             Result.is_approved.is_(False),
         )
         .values(is_approved=True, approved_by=current_user.id)
+    )
+    await notify_student_event(
+        db,
+        school_id=school_id,
+        student_ids=student_ids,
+        event_type=DomainEventType.result_published,
+        title="Results published",
+        body="New approved academic results are available.",
+        data={
+            "class_id": str(payload.class_id),
+            "academic_session": payload.academic_session,
+            "term": payload.term.value if hasattr(payload.term, "value") else str(payload.term),
+        },
     )
     await db.commit()
 

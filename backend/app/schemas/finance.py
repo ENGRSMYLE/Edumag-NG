@@ -51,6 +51,12 @@ class ConfirmPaymentRequest(BaseModel):
     notes: Optional[str] = Field(None, max_length=500)
 
 
+class FeeReminderRequest(BaseModel):
+    student_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=500)
+    academic_session: str = Field(..., min_length=1, max_length=20)
+    term: TermEnum
+
+
 class UpdatePaymentRequest(BaseModel):
     amount_kobo: Optional[int] = Field(None, gt=0)
     payment_type: Optional[PaymentTypeEnum] = None
@@ -134,3 +140,8 @@ class InitializePaystackResponse(BaseModel):
     authorization_url: str
     reference: str
     payment_id: uuid.UUID
+
+
+class FeeReminderResponse(BaseModel):
+    student_count: int
+    recipient_count: int

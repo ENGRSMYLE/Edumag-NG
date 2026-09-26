@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { PushNotificationSettings } from '@/components/pwa/PushNotificationSettings';
+import { NotificationPreferences } from '@/components/pwa/NotificationPreferences';
 import { parentPortalApi } from '@/lib/api';
 import type { ParentProfile } from '@/types/parentPortal';
 
@@ -25,6 +26,6 @@ export default function ProfilePage() {
       <label className="block text-xs font-semibold">Preferred contact channel<select value={form.preferred_contact_channel} onChange={e => setForm(f => ({ ...f, preferred_contact_channel: e.target.value as Channel }))} className="input-base mt-1 w-full"><option value="in_app">In app</option><option value="email">Email</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select></label>
       <button disabled={save.isPending} className="rounded-lg bg-[var(--color-navy)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{save.isPending ? 'Saving…' : 'Save changes'}</button>
     </div></form>}
-    <div className="mt-6 max-w-2xl"><PushNotificationSettings /></div>
+    <div className="mt-6 max-w-2xl space-y-5"><PushNotificationSettings /><NotificationPreferences /></div>
   </div>;
 }

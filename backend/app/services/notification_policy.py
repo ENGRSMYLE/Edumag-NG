@@ -133,6 +133,24 @@ async def resolve_guardian_recipients_for_student(
     event_type: DomainEventType,
 ) -> set[uuid.UUID]:
     """Resolve active, authorized parent users for a student event."""
+    return await resolve_guardian_recipients_for_students(
+        db,
+        school_id=school_id,
+        student_ids={student_id},
+        event_type=event_type,
+    )
+
+
+async def resolve_guardian_recipients_for_students(
+    db: AsyncSession,
+    *,
+    school_id: uuid.UUID,
+    student_ids: set[uuid.UUID],
+    event_type: DomainEventType,
+) -> set[uuid.UUID]:
+    """Resolve guardians for many students in one tenant-scoped query."""
+    if not student_ids:
+        return set()
     policy = get_notification_policy(event_type)
     permission = policy.relationship_permission
     if MembershipRole.parent not in policy.eligible_roles or permission is None:
@@ -161,7 +179,7 @@ async def resolve_guardian_recipients_for_student(
             & (Student.school_id == StudentGuardian.school_id),
         )
         .where(
-            Student.id == student_id,
+            Student.id.in_(student_ids),
             Student.school_id == school_id,
             Student.is_active.is_(True),
             StudentGuardian.school_id == school_id,
