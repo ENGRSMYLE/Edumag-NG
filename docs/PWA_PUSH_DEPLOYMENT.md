@@ -28,3 +28,20 @@
 - Search the frontend build output for the private key and require zero matches.
 - Confirm development starts when all VAPID variables are blank or absent.
 - Confirm partial key configuration fails startup with a configuration error.
+# Per-school rollout
+
+Push delivery defaults to disabled for every school after migration `016`.
+Enable it from **Super Admin → Settings → System → Push Notifications** only
+after the web and worker services share the same VAPID credentials.
+
+Recommended rollout:
+
+1. Internal test school and staff test accounts.
+2. Selected parent accounts that explicitly opt in.
+3. Review `/api/notifications/operations` for backlog, failures, expired
+   subscriptions, delivery success, and worker latency.
+4. Enable one pilot school, monitor it, then expand school by school.
+
+Turning the school flag off stops new subscriptions and new push outbox
+records. Authenticated in-app notifications continue, and existing browser
+subscriptions are retained so rollout can resume safely.

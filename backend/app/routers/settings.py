@@ -40,6 +40,7 @@ class SchoolSettingsOut(BaseModel):
     report_header: str | None = None
     report_logo_position: Literal["left", "center", "right"] = "center"
     parent_portal_enabled: bool = False
+    push_notifications_enabled: bool = False
 
     class Config:
         from_attributes = True
@@ -55,6 +56,7 @@ class SchoolSettingsUpdate(BaseModel):
     report_header: str | None = Field(None, max_length=500)
     report_logo_position: Literal["left", "center", "right"] | None = None
     parent_portal_enabled: bool | None = None
+    push_notifications_enabled: bool | None = None
 
 
 class GradeScaleOut(BaseModel):
@@ -121,6 +123,7 @@ async def get_school_settings(
         report_header=school.report_header,
         report_logo_position=school.report_logo_position,
         parent_portal_enabled=school.parent_portal_enabled,
+        push_notifications_enabled=school.push_notifications_enabled,
     )
 
 
@@ -207,6 +210,7 @@ async def update_school_settings(
         report_header=school.report_header,
         report_logo_position=school.report_logo_position,
         parent_portal_enabled=school.parent_portal_enabled,
+        push_notifications_enabled=school.push_notifications_enabled,
     )
 
 

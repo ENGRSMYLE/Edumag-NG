@@ -7,6 +7,7 @@ from app.models.communication import TargetAudience
 from app.models.guardian import GuardianProfile, GuardianStatus, StudentGuardian
 from app.models.notification import DomainEventType, Notification, NotificationChannel, NotificationOutbox, NotificationPreference, OutboxStatus
 from app.models.school_membership import MembershipRole, SchoolMembership
+from app.models.school import School
 from app.models.user import User
 from app.services.notification_policy import (
     resolve_guardian_recipients_for_students,
@@ -18,6 +19,9 @@ async def emit_notifications(db: AsyncSession, *, school_id: uuid.UUID, user_ids
     records = []
     if not user_ids:
         return records
+    push_rollout_enabled = bool((await db.execute(
+        select(School.push_notifications_enabled).where(School.id == school_id)
+    )).scalar_one_or_none())
     memberships = {
         row.user_id: row.role
         for row in (await db.execute(select(SchoolMembership).where(
@@ -40,7 +44,7 @@ async def emit_notifications(db: AsyncSession, *, school_id: uuid.UUID, user_ids
             continue
         preference = effective_preference(event_type, role, preferences.get(user_id))
         in_app_enabled = preference.in_app_enabled if respect_preferences else True
-        push_enabled = preference.push_enabled if respect_preferences else True
+        push_enabled = (preference.push_enabled if respect_preferences else True) and push_rollout_enabled
         if not in_app_enabled and not push_enabled:
             continue
         notification = Notification(school_id=school_id, user_id=user_id, event_type=event_type, title=title, body=body, data=data or {}, is_in_app_visible=in_app_enabled)

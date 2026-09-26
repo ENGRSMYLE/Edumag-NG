@@ -49,6 +49,9 @@ class School(Base):
     parent_portal_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    push_notifications_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     subscription_plan: Mapped[SubscriptionPlan] = mapped_column(
         Enum(SubscriptionPlan, name="subscription_plan_enum"),

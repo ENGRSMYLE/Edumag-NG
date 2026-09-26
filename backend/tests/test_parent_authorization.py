@@ -26,6 +26,7 @@ async def _seed_parent_access(db: AsyncSession):
         name="Parent School A", school_type=SchoolType.secondary,
         address="1 A Road", lga="Ikeja", state="Lagos",
         phone="08011111111", email="a@parent-school.test",
+        push_notifications_enabled=True,
     )
     school_b = School(
         name="Parent School B", school_type=SchoolType.secondary,

@@ -8,6 +8,7 @@ from app.dependencies.auth import get_current_user
 from app.dependencies.rbac import require_role
 from app.config import settings
 from app.models.notification import DomainEventType, Notification
+from app.models.school import School
 from app.models.user import User
 from app.schemas.notification import (
     NotificationPage,
@@ -38,6 +39,15 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 def _scope(user: User): return (Notification.school_id == user.current_school_id, Notification.user_id == user.id)
 
 
+async def _push_rollout_enabled(db: AsyncSession, school_id: uuid.UUID) -> bool:
+    return bool((await db.execute(
+        select(School.push_notifications_enabled).where(
+            School.id == school_id,
+            School.is_active.is_(True),
+        )
+    )).scalar_one_or_none())
+
+
 @router.get("/operations")
 async def notification_operations(
     user: User = Depends(require_role("super_admin", "admin")),
@@ -63,7 +73,7 @@ async def push_status(
         db, user_id=user.id, school_id=user.current_school_id  # type: ignore[attr-defined]
     )
     return PushSubscriptionStatus(
-        configured=settings.web_push_enabled,
+        configured=settings.web_push_enabled and await _push_rollout_enabled(db, user.current_school_id),  # type: ignore[attr-defined]
         subscribed=subscribed,
         device_count=device_count,
     )
@@ -77,7 +87,7 @@ async def subscribe_push(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PushSubscriptionStatus:
-    if not settings.web_push_enabled:
+    if not settings.web_push_enabled or not await _push_rollout_enabled(db, user.current_school_id):  # type: ignore[attr-defined]
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Web Push is not configured")
     await upsert_push_subscription(
         db,
@@ -113,7 +123,7 @@ async def unsubscribe_push(
         db, user_id=user.id, school_id=user.current_school_id  # type: ignore[attr-defined]
     )
     return PushSubscriptionStatus(
-        configured=settings.web_push_enabled,
+        configured=settings.web_push_enabled and await _push_rollout_enabled(db, user.current_school_id),  # type: ignore[attr-defined]
         subscribed=subscribed,
         device_count=device_count,
     )
@@ -126,7 +136,7 @@ async def test_push(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PushTestResponse:
-    if not settings.web_push_enabled:
+    if not settings.web_push_enabled or not await _push_rollout_enabled(db, user.current_school_id):  # type: ignore[attr-defined]
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Web Push is not configured")
     subscribed, _ = await get_push_subscription_status(
         db, user_id=user.id, school_id=user.current_school_id  # type: ignore[attr-defined]

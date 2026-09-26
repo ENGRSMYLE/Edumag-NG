@@ -581,6 +581,11 @@ function SystemTab({ settings }: { settings?: SchoolSettings }) {
     onSuccess: () => { toast.success('Parent Portal rollout setting updated'); queryClient.invalidateQueries({ queryKey: ['settings', 'school'] }); },
     onError: () => toast.error('Could not update Parent Portal setting'),
   });
+  const pushRollout = useMutation({
+    mutationFn: (enabled: boolean) => settingsApi.updateSchool({ push_notifications_enabled: enabled }),
+    onSuccess: () => { toast.success('Push notification rollout setting updated'); queryClient.invalidateQueries({ queryKey: ['settings', 'school'] }); },
+    onError: () => toast.error('Could not update push notification rollout'),
+  });
 
   return (
     <div className="space-y-6">
@@ -588,6 +593,12 @@ function SystemTab({ settings }: { settings?: SchoolSettings }) {
         <div className="flex items-center justify-between gap-5">
           <div><h4 className="text-sm font-semibold text-[var(--color-text-primary)]">Parent Portal</h4><p className="mt-1 text-sm text-[var(--color-text-muted)]">Enable parent sign-in and child-data access after guardian relationships have been validated.</p></div>
           <button type="button" disabled={portal.isPending} onClick={() => portal.mutate(!settings?.parent_portal_enabled)} className={`relative h-7 w-12 rounded-full transition-colors ${settings?.parent_portal_enabled ? 'bg-emerald-600' : 'bg-slate-300'}`} aria-pressed={Boolean(settings?.parent_portal_enabled)}><span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${settings?.parent_portal_enabled ? 'left-6' : 'left-1'}`} /></button>
+        </div>
+      </div>
+      <div className="rounded-xl border border-[var(--color-border)] p-5">
+        <div className="flex items-center justify-between gap-5">
+          <div><h4 className="text-sm font-semibold text-[var(--color-text-primary)]">Push Notifications</h4><p className="mt-1 text-sm text-[var(--color-text-muted)]">Enable browser opt-in and push delivery for this school. In-app notifications continue when this is disabled.</p></div>
+          <button type="button" disabled={pushRollout.isPending} onClick={() => pushRollout.mutate(!settings?.push_notifications_enabled)} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${settings?.push_notifications_enabled ? 'bg-emerald-600' : 'bg-slate-300'}`} aria-label="Enable push notifications for this school" aria-pressed={Boolean(settings?.push_notifications_enabled)}><span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${settings?.push_notifications_enabled ? 'left-6' : 'left-1'}`} /></button>
         </div>
       </div>
       {/* Data export */}

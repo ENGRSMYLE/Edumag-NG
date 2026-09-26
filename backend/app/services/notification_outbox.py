@@ -43,11 +43,47 @@ async def get_outbox_metrics(db: AsyncSession, *, school_id=None) -> dict:
             PushSubscription.is_active.is_(True), *subscription_scope,
         )
     )).scalar_one()
+    total_subscriptions = (await db.execute(
+        select(func.count(PushSubscription.id)).where(*subscription_scope)
+    )).scalar_one()
+    expired_subscriptions = (await db.execute(
+        select(func.count(PushSubscription.id)).where(
+            PushSubscription.is_active.is_(False),
+            PushSubscription.last_failure_at.is_not(None),
+            *subscription_scope,
+        )
+    )).scalar_one()
+    terminal_rows = (await db.execute(
+        select(NotificationOutbox.status, NotificationOutbox.created_at, NotificationOutbox.processed_at)
+        .join(Notification, Notification.id == NotificationOutbox.notification_id)
+        .where(
+            NotificationOutbox.status.in_([OutboxStatus.delivered, OutboxStatus.failed]),
+            *notification_scope,
+        )
+    )).all()
+    delivered_count = sum(row.status == OutboxStatus.delivered for row in terminal_rows)
+    terminal_count = len(terminal_rows)
+    latencies = [
+        (row.processed_at - row.created_at).total_seconds()
+        for row in terminal_rows
+        if row.processed_at is not None
+    ]
     return {
         "pending_outbox_count": pending_count,
         "failed_delivery_count": failed_count,
         "oldest_pending_event": oldest_pending,
         "active_subscription_count": active_subscriptions,
+        "total_subscription_count": total_subscriptions,
+        "subscription_active_rate": round(active_subscriptions / total_subscriptions, 4) if total_subscriptions else None,
+        "expired_subscription_count": expired_subscriptions,
+        "expired_subscription_rate": round(expired_subscriptions / total_subscriptions, 4) if total_subscriptions else None,
+        "delivered_outbox_count": delivered_count,
+        "delivery_success_rate": round(delivered_count / terminal_count, 4) if terminal_count else None,
+        "average_worker_latency_seconds": round(sum(latencies) / len(latencies), 3) if latencies else None,
+        # These require explicit, consent-aware browser analytics and are not
+        # inferred from delivery data.
+        "permission_denied_rate": None,
+        "notification_click_through_rate": None,
     }
 
 
