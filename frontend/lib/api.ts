@@ -74,6 +74,20 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const AUTH_ENDPOINTS_WITHOUT_REFRESH = [
+  '/auth/login', '/auth/refresh', '/auth/register-school', '/auth/select-school',
+  '/auth/set-password', '/auth/send-otp', '/auth/verify-otp',
+  '/auth/forgot-password', '/auth/reset-password',
+];
+
+function authDebug(event: string, details?: Record<string, unknown>) {
+  if (process.env.NODE_ENV === 'development') console.info(`[AUTH] ${event}`, details ?? '');
+}
+
+function skipsAutomaticRefresh(url?: string): boolean {
+  return AUTH_ENDPOINTS_WITHOUT_REFRESH.some((endpoint) => url?.includes(endpoint));
+}
+
 // ---------------------------------------------------------------------------
 // Request interceptor — attach in-memory access token as fallback header
 // ---------------------------------------------------------------------------
@@ -113,6 +127,7 @@ function flushQueueWithError(error: unknown) {
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    if (!error.config) return Promise.reject(error);
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
     };
@@ -134,7 +149,7 @@ api.interceptors.response.use(
     }
 
     // ── 401: Attempt silent token refresh (once per request) ───────────────
-    if (error.response?.status !== 401 || originalRequest._retry) {
+    if (error.response?.status !== 401 || originalRequest._retry || skipsAutomaticRefresh(originalRequest.url)) {
       return Promise.reject(error);
     }
 
@@ -157,22 +172,28 @@ api.interceptors.response.use(
     }
 
     isRefreshing = true;
+    authDebug('refresh started');
 
     try {
       // Use a bare axios call to avoid going through our own interceptors
       const { data } = await axios.post<TokenResponse>(
         `${api.defaults.baseURL}/auth/refresh`,
         {},
-        { withCredentials: true },
+        { withCredentials: true, timeout: 15_000 },
       );
 
       const newToken = data.access_token;
       useAuthStore.getState().login(data);
+      authDebug('refresh succeeded');
 
       drainQueue(newToken);
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return api(originalRequest);
     } catch (refreshError) {
+      authDebug('refresh failed', {
+        status: axios.isAxiosError(refreshError) ? refreshError.response?.status : undefined,
+        timeout: axios.isAxiosError(refreshError) && refreshError.code === 'ECONNABORTED',
+      });
       flushQueueWithError(refreshError);
       _forceLogout();
       return Promise.reject(error);
@@ -183,8 +204,9 @@ api.interceptors.response.use(
 );
 
 function _forceLogout() {
+  authDebug('clearing invalid authentication state');
   useAuthStore.getState().logout();
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
     window.location.href = '/login';
   }
 }
@@ -195,7 +217,7 @@ function _forceLogout() {
 
 export const authApi = {
   login: (data: LoginRequest) =>
-    api.post<LoginResponse>('/auth/login', data),
+    api.post<LoginResponse>('/auth/login', data, { timeout: 15_000 }),
 
   registerSchool: (data: RegisterSchoolRequest) =>
     api.post<TokenResponse>('/auth/register-school', data),
@@ -210,16 +232,16 @@ export const authApi = {
     api.get<SchoolOption[]>('/auth/my-schools'),
 
   logout: () =>
-    api.post('/auth/logout'),
+    api.post('/auth/logout', undefined, { timeout: 15_000 }),
 
   me: (config?: { signal?: AbortSignal; timeout?: number }) =>
-    api.get<AuthUser>('/auth/me', config),
+    api.get<AuthUser>('/auth/me', { timeout: 15_000, ...config }),
 
   setPassword: (data: SetPasswordRequest) =>
     api.post<TokenResponse>('/auth/set-password', data),
 
   refresh: () =>
-    api.post<TokenResponse>('/auth/refresh'),
+    api.post<TokenResponse>('/auth/refresh', undefined, { timeout: 15_000 }),
 
   sendOTP: (data: SendOTPRequest) =>
     api.post<{ message: string; expires_in_minutes: number }>('/auth/send-otp', data),

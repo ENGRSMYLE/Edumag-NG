@@ -13,4 +13,4 @@ async def test_notification_and_outbox_are_staged_without_external_delivery(clie
         notification = (await db.execute(select(Notification).where(Notification.id == records[0].id))).scalar_one()
         outbox = (await db.execute(select(NotificationOutbox).where(NotificationOutbox.notification_id == notification.id))).scalar_one()
         assert notification.user_id == context.user.id and notification.is_read is False
-        assert outbox.processed_at is None and outbox.attempts == 0
+        assert outbox.processed_at is None and outbox.attempt_count == 0

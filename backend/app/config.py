@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     WEB_PUSH_VAPID_PUBLIC_KEY: str | None = None
     WEB_PUSH_VAPID_PRIVATE_KEY: str | None = None
     WEB_PUSH_SUBJECT: str = "mailto:support@example.com"
+    PUSH_OUTBOX_MAX_ATTEMPTS: int = 6
+    PUSH_OUTBOX_BASE_RETRY_SECONDS: int = 30
+    PUSH_OUTBOX_MAX_RETRY_SECONDS: int = 3600
+    PUSH_OUTBOX_LEASE_SECONDS: int = 300
+    PUSH_OUTBOX_BATCH_SIZE: int = 25
 
     # Email
     RESEND_API_KEY: str

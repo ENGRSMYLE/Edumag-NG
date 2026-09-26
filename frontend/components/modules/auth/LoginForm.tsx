@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
@@ -55,9 +56,11 @@ export function LoginForm() {
   });
 
   const onSubmit = async (data: FormData) => {
+    if (process.env.NODE_ENV === 'development') console.info('[AUTH] login started');
     try {
       const res = await authApi.login(data);
       const response = res.data;
+      if (process.env.NODE_ENV === 'development') console.info('[AUTH] login response', { status: res.status });
 
       // Multi-school: redirect to school picker
       if ('requires_school_selection' in response && response.requires_school_selection) {
@@ -69,6 +72,7 @@ export function LoginForm() {
       // Single school: log in directly
       const tokenResponse = response as TokenResponse;
       login(tokenResponse);
+      if (process.env.NODE_ENV === 'development') console.info('[AUTH] session saved', { role: tokenResponse.user.role });
 
       if (tokenResponse.user.is_first_login) {
         router.push('/set-password');
@@ -78,10 +82,22 @@ export function LoginForm() {
       const dest = ROLE_HOME[tokenResponse.user.role] ?? '/login';
       router.push(dest);
     } catch (err: unknown) {
+      const isTimeout = axios.isAxiosError(err) && err.code === 'ECONNABORTED';
+      const isNetworkError = axios.isAxiosError(err) && !err.response;
       const detail = (err as { response?: { data?: { detail?: unknown } } })
         ?.response?.data?.detail;
+      if (process.env.NODE_ENV === 'development') {
+        console.info('[AUTH] login failed', {
+          status: axios.isAxiosError(err) ? err.response?.status : undefined,
+          timeout: isTimeout,
+        });
+      }
       toast.error(
-        typeof detail === 'string'
+        isTimeout
+          ? 'The server took too long to respond. Please try again.'
+          : isNetworkError
+          ? 'Cannot reach the server. Check your connection and try again.'
+          : typeof detail === 'string'
           ? detail
           : 'Invalid credentials. Please try again.',
       );

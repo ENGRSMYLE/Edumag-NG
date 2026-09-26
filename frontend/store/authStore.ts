@@ -1,11 +1,25 @@
 'use client';
 
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
 import type { AuthUser, SchoolOption, TokenResponse } from '@/types/auth';
 
 const ROUTING_COOKIE_MAX_AGE = 7 * 24 * 60 * 60;
+const unavailableStorage: StateStorage = {
+  getItem: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+};
+
+function browserSessionStorage(): StateStorage {
+  if (typeof window === 'undefined') return unavailableStorage;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return unavailableStorage;
+  }
+}
 
 interface AuthState {
   user: AuthUser | null;
@@ -58,7 +72,8 @@ export const useAuthStore = create<AuthState>()(
         // see auth state. The real JWT lives in the httpOnly cookie on the API
         // domain — this cookie only carries role + expiry for routing decisions.
         if (typeof document !== 'undefined') {
-          document.cookie = `_auth_role=${tokenResponse.user.role}; path=/; max-age=${ROUTING_COOKIE_MAX_AGE}; SameSite=Lax`;
+          const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+          document.cookie = `_auth_role=${tokenResponse.user.role}; path=/; max-age=${ROUTING_COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
         }
       },
 
@@ -73,8 +88,8 @@ export const useAuthStore = create<AuthState>()(
           requiresSchoolSelection: false,
         });
         if (typeof window !== 'undefined') {
-          sessionStorage.removeItem('edumag-auth');
-          document.cookie = '_auth_role=; path=/; max-age=0';
+          try { browserSessionStorage().removeItem('edumag-auth'); } catch { /* state is already cleared */ }
+          try { document.cookie = '_auth_role=; path=/; max-age=0; SameSite=Lax'; } catch { /* routing guard also verifies API state */ }
         }
       },
 
@@ -125,20 +140,14 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
         });
         if (typeof document !== 'undefined') {
-          document.cookie = `_auth_role=${user.role}; path=/; max-age=${ROUTING_COOKIE_MAX_AGE}; SameSite=Lax`;
+          const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+          document.cookie = `_auth_role=${user.role}; path=/; max-age=${ROUTING_COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
         }
       },
     }),
     {
       name: 'edumag-auth',
-      storage: createJSONStorage(() => {
-        if (typeof window !== 'undefined') return sessionStorage;
-        return {
-          getItem: () => null,
-          setItem: () => {},
-          removeItem: () => {},
-        };
-      }),
+      storage: createJSONStorage(browserSessionStorage),
       // Only persist user identity — never persist the token
       partialize: (state) => ({
         user: state.user,

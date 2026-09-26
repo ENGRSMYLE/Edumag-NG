@@ -26,9 +26,9 @@ export function middleware(request: NextRequest) {
   }
 
   // Authenticated on a public auth page → send to their dashboard
-  if (isPublicRoute && roleHome) {
-    return NextResponse.redirect(new URL(roleHome, request.url));
-  }
+  // `_auth_role` is only a routing hint. It can outlive sessionStorage and the
+  // API cookies, so it must never make the login recovery route unreachable.
+  if (isPublicRoute) return NextResponse.next();
 
   // Dashboard access: ensure user only visits their own role's section
   if (isDashboard && roleHome && !isRouteInRoleSection(pathname, roleHome)) {
