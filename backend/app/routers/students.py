@@ -228,16 +228,21 @@ async def list_students(
 
     filters = [Student.school_id == school_id]
 
-    if search:
-        term = f"%{search}%"
-        filters.append(
-            or_(
-                Student.first_name.ilike(term),
-                Student.last_name.ilike(term),
-                Student.middle_name.ilike(term),
-                Student.admission_number.ilike(term),
+    if search and (normalized_search := " ".join(search.split())):
+        # Match every word against any supported identifier. This makes normal
+        # full-name searches (for example, "Ada Okafor") work even though the
+        # name is stored in separate columns, while preserving admission-number
+        # and partial-name matching.
+        for token in normalized_search.split(" "):
+            term = f"%{token}%"
+            filters.append(
+                or_(
+                    Student.first_name.ilike(term),
+                    Student.last_name.ilike(term),
+                    Student.middle_name.ilike(term),
+                    Student.admission_number.ilike(term),
+                )
             )
-        )
     if class_id is not None:
         filters.append(Student.class_id == class_id)
     if gender is not None:

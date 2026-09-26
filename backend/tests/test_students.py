@@ -417,3 +417,26 @@ async def test_duplicate_admission_number_rejected(client: AsyncClient) -> None:
 
     resp2 = await client.post("/api/students/", json=payload, headers=_auth(token))
     assert resp2.status_code == 409
+
+
+async def test_student_search_supports_full_name_and_admission_number(
+    client: AsyncClient,
+) -> None:
+    school = await _register_school(client)
+    token = school["access_token"]
+    create = await client.post(
+        "/api/students/",
+        json={**_STUDENT_BASE, "admission_number": "SEARCH-2042"},
+        headers=_auth(token),
+    )
+    assert create.status_code == 201, create.text
+    student_id = create.json()["id"]
+
+    for search in ("Chukwuemeka Okafor", "chukwu okaf", "SEARCH-2042"):
+        response = await client.get(
+            "/api/students/",
+            params={"search": search, "is_active": True},
+            headers=_auth(token),
+        )
+        assert response.status_code == 200, response.text
+        assert [item["id"] for item in response.json()["items"]] == [student_id]

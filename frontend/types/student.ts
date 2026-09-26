@@ -7,6 +7,7 @@ export interface Student {
   first_name: string;
   last_name: string;
   middle_name?: string;
+  full_name?: string;
   date_of_birth: string;
   gender: Gender;
   photo_url?: string;
