@@ -1,3 +1,25 @@
-import { Mail } from 'lucide-react';
-import { ParentSection } from '../_components/ParentSection';
-export default function Page() { return <ParentSection title="Communication" description="School messages and announcements." empty="No messages" icon={Mail} />; }
+'use client';
+import { FormEvent, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Mail, Send, X } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { communicationApi } from '@/lib/api';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { formatDateTime } from '@/lib/formatters';
+import type { MessageResponse } from '@/types/communication';
+
+export default function CommunicationPage() {
+  const qc = useQueryClient(); const [compose, setCompose] = useState(false); const [open, setOpen] = useState<MessageResponse | null>(null);
+  const inbox = useQuery({ queryKey: ['messages', 'inbox', 'parent'], queryFn: () => communicationApi.getInbox({ page: 1, per_page: 50 }).then(r => r.data), refetchInterval: 30_000 });
+  const recipients = useQuery({ queryKey: ['messages', 'recipients', 'parent'], queryFn: () => communicationApi.getRecipients({ page: 1, per_page: 50 }).then(r => r.data), enabled: compose });
+  const [recipientId, setRecipientId] = useState(''); const [subject, setSubject] = useState(''); const [body, setBody] = useState('');
+  const send = useMutation({ mutationFn: () => communicationApi.sendMessage({ recipient_id: recipientId, subject, body }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['messages'] }); qc.invalidateQueries({ queryKey: ['unread-count'] }); setCompose(false); setBody(''); setSubject(''); toast.success('Message sent'); }, onError: () => toast.error('Message could not be sent') });
+  const read = async (message: MessageResponse) => { setOpen(message); if (!message.is_read) { await communicationApi.markRead(message.id); qc.invalidateQueries({ queryKey: ['messages'] }); qc.invalidateQueries({ queryKey: ['unread-count'] }); } };
+  const submit = (e: FormEvent) => { e.preventDefault(); if (recipientId && body.trim()) send.mutate(); };
+  return <div><PageHeader title="Communication" description="Messages from your school and authorized conversations." actions={<button onClick={() => setCompose(true)} className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-navy)] px-4 py-2 text-sm font-semibold text-white"><Send className="h-4 w-4" />New message</button>} />
+    <div className="card-shell"><div className="card-core overflow-hidden">{inbox.isLoading ? <p className="p-8 text-center text-sm">Loading messages…</p> : inbox.isError ? <p className="p-8 text-center text-sm text-red-600">Messages could not be loaded.</p> : inbox.data?.items.length ? <div className="divide-y">{inbox.data.items.map(message => <button key={message.id} onClick={() => read(message)} className={`flex w-full gap-4 p-4 text-left hover:bg-slate-50 ${message.is_read ? '' : 'bg-blue-50/50 font-semibold'}`}><div className="min-w-0 flex-1"><div className="flex justify-between gap-3"><span>{message.sender_name}</span><span className="whitespace-nowrap text-xs font-normal text-slate-500">{formatDateTime(message.created_at)}</span></div><p className="truncate text-sm">{message.subject || 'No subject'}</p><p className="truncate text-xs font-normal text-slate-500">{message.body}</p></div></button>)}</div> : <EmptyState icon={Mail} title="No messages" description="Messages from the school will appear here." />}</div></div>
+    {open && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setOpen(null)}><article className="w-full max-w-2xl rounded-2xl bg-white p-6" onMouseDown={e => e.stopPropagation()}><button onClick={() => setOpen(null)} className="float-right"><X /></button><h2 className="pr-8 text-xl font-semibold">{open.subject || 'No subject'}</h2><p className="mt-2 text-sm text-slate-500">From {open.sender_name} · {formatDateTime(open.created_at)}</p><p className="mt-6 whitespace-pre-wrap text-sm leading-6">{open.body}</p></article></div>}
+    {compose && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setCompose(false)}><form onSubmit={submit} className="w-full max-w-xl space-y-4 rounded-2xl bg-white p-6" onMouseDown={e => e.stopPropagation()}><div className="flex justify-between"><h2 className="text-lg font-semibold">New message</h2><button type="button" onClick={() => setCompose(false)}><X /></button></div><label className="block text-xs font-semibold">To<select required value={recipientId} onChange={e => setRecipientId(e.target.value)} className="input-base mt-1 w-full"><option value="">Select school contact</option>{recipients.data?.items.map(r => <option key={r.id} value={r.id}>{r.name} — {r.role.replace('_', ' ')}</option>)}</select></label><label className="block text-xs font-semibold">Subject<input value={subject} onChange={e => setSubject(e.target.value)} className="input-base mt-1 w-full" /></label><label className="block text-xs font-semibold">Message<textarea required value={body} onChange={e => setBody(e.target.value)} className="input-base mt-1 min-h-36 w-full" /></label><button disabled={send.isPending} className="rounded-lg bg-[var(--color-navy)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{send.isPending ? 'Sending…' : 'Send message'}</button></form></div>}
+  </div>;
+}

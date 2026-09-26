@@ -12,7 +12,6 @@ import {
   FileDown,
   Loader2,
   BookOpen,
-  ChevronRight,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -21,6 +20,7 @@ import { Badge } from '@/components/shared/Badge';
 import { studentsApi, resultsApi } from '@/lib/api';
 import { formatDate, getInitials, getCurrentSession, formatTerm } from '@/lib/formatters';
 import { useReportCardPDF } from '@/hooks/useReportCardPDF';
+import { StudentGuardianManager } from '@/components/parent/StudentGuardianManager';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -257,7 +257,7 @@ function ResultsTab({ studentId }: { studentId: string }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'profile' | 'results';
+type Tab = 'profile' | 'results' | 'guardians';
 
 export default function AdminStudentDetailPage() {
   const { id }    = useParams<{ id: string }>();
@@ -336,7 +336,7 @@ export default function AdminStudentDetailPage() {
 
       {/* Tabs */}
       <div className="flex items-center gap-0 border-b border-[var(--color-border)]">
-        {(['profile', 'results'] as Tab[]).map((t) => (
+        {(['profile', 'results', 'guardians'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -348,7 +348,7 @@ export default function AdminStudentDetailPage() {
                 : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]',
             )}
           >
-            {t === 'results' ? 'Academic Results' : 'Profile'}
+            {t === 'results' ? 'Academic Results' : t === 'guardians' ? 'Parents & Guardians' : 'Profile'}
           </button>
         ))}
       </div>
@@ -373,7 +373,7 @@ export default function AdminStudentDetailPage() {
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <InfoRow label="Admission Number" value={student.admission_number} />
                 <InfoRow label="Date Admitted"    value={student.admission_date ? formatDate(student.admission_date) : null} />
-                <InfoRow label="Current Class"    value={(student as any).class_name ?? null} />
+                <InfoRow label="Current Class"    value={student.class_name ?? null} />
                 <InfoRow label="Status"           value={student.is_active ? 'Active' : 'Inactive'} />
               </div>
             </Section>
@@ -421,6 +421,7 @@ export default function AdminStudentDetailPage() {
 
       {/* Results tab */}
       {tab === 'results' && <ResultsTab studentId={id} />}
+      {tab === 'guardians' && <StudentGuardianManager studentId={id} />}
     </div>
   );
 }

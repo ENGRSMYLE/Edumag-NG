@@ -573,11 +573,23 @@ function ReportFormatTab({ settings }: { settings: SchoolSettings | undefined })
 
 // ── System tab ────────────────────────────────────────────────────────────────
 
-function SystemTab() {
+function SystemTab({ settings }: { settings?: SchoolSettings }) {
   const [deactivateOpen, setDeactivateOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const portal = useMutation({
+    mutationFn: (enabled: boolean) => settingsApi.updateSchool({ parent_portal_enabled: enabled }),
+    onSuccess: () => { toast.success('Parent Portal rollout setting updated'); queryClient.invalidateQueries({ queryKey: ['settings', 'school'] }); },
+    onError: () => toast.error('Could not update Parent Portal setting'),
+  });
 
   return (
     <div className="space-y-6">
+      <div className="rounded-xl border border-[var(--color-border)] p-5">
+        <div className="flex items-center justify-between gap-5">
+          <div><h4 className="text-sm font-semibold text-[var(--color-text-primary)]">Parent Portal</h4><p className="mt-1 text-sm text-[var(--color-text-muted)]">Enable parent sign-in and child-data access after guardian relationships have been validated.</p></div>
+          <button type="button" disabled={portal.isPending} onClick={() => portal.mutate(!settings?.parent_portal_enabled)} className={`relative h-7 w-12 rounded-full transition-colors ${settings?.parent_portal_enabled ? 'bg-emerald-600' : 'bg-slate-300'}`} aria-pressed={Boolean(settings?.parent_portal_enabled)}><span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${settings?.parent_portal_enabled ? 'left-6' : 'left-1'}`} /></button>
+        </div>
+      </div>
       {/* Data export */}
       <div className="rounded-xl border border-[var(--color-border)] p-5">
         <h4 className="text-sm font-semibold text-[var(--color-text-primary)] mb-1">Data Export</h4>
@@ -696,7 +708,7 @@ export default function SettingsPage() {
                 {activeTab === 'grading'  && <GradingTab />}
                 {activeTab === 'terms'    && <TermsTab />}
                 {activeTab === 'report'   && <ReportFormatTab settings={settings} />}
-                {activeTab === 'system'   && <SystemTab />}
+                {activeTab === 'system'   && <SystemTab settings={settings} />}
               </>
             )}
           </div>

@@ -101,6 +101,7 @@ export interface SchoolSettings {
   motto?: string;
   report_header?: string;
   report_logo_position?: 'left' | 'center' | 'right';
+  parent_portal_enabled?: boolean;
 }
 
 export interface GradeScale {

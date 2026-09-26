@@ -48,7 +48,7 @@ export interface ParentProfile {
   phone?: string | null;
   address?: string | null;
   occupation?: string | null;
-  preferred_contact_channel: 'email' | 'sms' | 'whatsapp' | 'phone';
+  preferred_contact_channel: 'in_app' | 'email' | 'sms' | 'whatsapp';
 }
 
 export interface ParentAttendanceItem { id: string; date: string; status: 'present' | 'absent' | 'late' | 'excused'; note?: string | null }

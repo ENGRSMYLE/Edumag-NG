@@ -10,6 +10,13 @@ export interface GuardianRelationship {
   phone?: string;
   relationship_type: Relationship;
   is_primary: boolean;
+  is_emergency_contact?: boolean;
+  can_receive_messages?: boolean;
+  can_view_attendance?: boolean;
+  can_view_results?: boolean;
+  can_view_assignments?: boolean;
+  can_view_finance?: boolean;
+  can_pick_up?: boolean;
   is_active: boolean;
 }
 
@@ -41,6 +48,13 @@ export interface CreateParentRequest {
   address?: string;
   occupation?: string;
   is_primary?: boolean;
+  is_emergency_contact?: boolean;
+  can_receive_messages?: boolean;
+  can_view_attendance?: boolean;
+  can_view_results?: boolean;
+  can_view_assignments?: boolean;
+  can_view_finance?: boolean;
+  can_pick_up?: boolean;
 }
 
 export interface ParentListParams {

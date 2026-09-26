@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Mail, Phone, UserCircle } from 'lucide-react';
+import { Mail, Phone, Plus, UserCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -11,6 +11,7 @@ import { Badge } from '@/components/shared/Badge';
 import { parentsApi } from '@/lib/api';
 import { formatNigerianPhone, getInitials } from '@/lib/formatters';
 import type { ParentListItem } from '@/types/parent';
+import { InviteParentModal, ParentDetailsModal } from '@/components/parent/ParentManagementModal';
 
 const STATUS_VARIANT: Record<string, 'info' | 'success' | 'neutral' | 'warning'> = {
   active: 'success',
@@ -37,6 +38,8 @@ function ParentNameCell({ row }: { row: ParentListItem }) {
 export default function AdminParentsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [selectedParent, setSelectedParent] = useState<ParentListItem | null>(null);
 
   const queryParams = { page, per_page: 20, search: search || undefined };
 
@@ -105,6 +108,7 @@ export default function AdminParentsPage() {
       className: 'w-24',
       render: (_, row) => (
         <button
+          onClick={() => setSelectedParent(row)}
           className={clsx(
             'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer',
             'text-[var(--color-navy)] bg-[var(--color-navy)]/8 hover:bg-[var(--color-navy)]/12',
@@ -123,6 +127,7 @@ export default function AdminParentsPage() {
       <PageHeader
         title="Parent Directory"
         description="View and manage parent and guardian contacts"
+        actions={<button onClick={() => setInviteOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-navy)] px-4 py-2 text-sm font-semibold text-white"><Plus className="h-4 w-4" />Invite Parent</button>}
       />
 
       <DataTable
@@ -139,6 +144,8 @@ export default function AdminParentsPage() {
         emptyTitle="No parents found"
         emptyDescription="Parent records will appear here once added."
       />
+      {inviteOpen && <InviteParentModal onClose={() => setInviteOpen(false)} />}
+      {selectedParent && <ParentDetailsModal parent={selectedParent} onClose={() => setSelectedParent(null)} />}
     </div>
   );
 }

@@ -46,6 +46,9 @@ class School(Base):
     report_logo_position: Mapped[str] = mapped_column(
         String(10), nullable=False, default="center", server_default="center"
     )
+    parent_portal_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     subscription_plan: Mapped[SubscriptionPlan] = mapped_column(
         Enum(SubscriptionPlan, name="subscription_plan_enum"),

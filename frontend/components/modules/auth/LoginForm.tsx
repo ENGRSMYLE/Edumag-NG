@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
@@ -118,12 +119,12 @@ export function LoginForm() {
           <label className="text-xs font-semibold text-[var(--color-text-primary)]">
             Password
           </label>
-          <a
-            href="#"
+          <Link
+            href="/forgot-password"
             className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-navy)] transition-colors"
           >
             Forgot password?
-          </a>
+          </Link>
         </div>
         <div className="relative">
           <Lock

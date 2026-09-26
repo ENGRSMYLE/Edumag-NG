@@ -228,6 +228,12 @@ export const authApi = {
 
   verifyOTP: (data: VerifyOTPRequest) =>
     api.post<VerifyOTPResponse>('/auth/verify-otp', data),
+
+  forgotPassword: (email: string) =>
+    api.post<{ message: string }>('/auth/forgot-password', { email }),
+
+  resetPassword: (token: string, newPassword: string) =>
+    api.post<{ message: string }>('/auth/reset-password', { token, new_password: newPassword }),
 };
 
 // ---------------------------------------------------------------------------
@@ -288,6 +294,15 @@ export const studentsApi = {
 
   generateAdmissionNumber: () =>
     api.get<{ admission_number: string }>('/students/generate-admission-number'),
+
+  guardians: (studentId: string) =>
+    api.get<import('@/types/parent').GuardianRelationship[]>(`/students/${studentId}/guardians`),
+
+  updateGuardian: (studentId: string, relationshipId: string, data: Record<string, unknown>) =>
+    api.patch(`/students/${studentId}/guardians/${relationshipId}`, data),
+
+  removeGuardian: (studentId: string, relationshipId: string) =>
+    api.delete(`/students/${studentId}/guardians/${relationshipId}`),
 };
 
 // ---------------------------------------------------------------------------
@@ -301,12 +316,21 @@ export const parentsApi = {
   create: (data: CreateParentRequest) =>
     api.post('/parents/invite', data),
 
+  get: (id: string) => api.get<ParentListItem>(`/parents/${id}`),
+
+  resendInvite: (id: string) => api.post(`/parents/${id}/resend-invite`),
+
+  enable: (id: string) => api.post(`/parents/${id}/enable`),
+
+  disable: (id: string) => api.post(`/parents/${id}/disable`),
+
   update: (id: string, data: Partial<Pick<ParentListItem, 'name' | 'address' | 'occupation'>>) =>
     api.patch<ParentListItem>(`/parents/${id}`, data),
 };
 
 export const parentPortalApi = {
   profile: () => api.get<ParentProfile>('/parents/me'),
+  updateProfile: (data: { address?: string; occupation?: string; preferred_contact_channel?: string }) => api.patch<ParentProfile>('/parents/me', data),
   children: () => api.get<ParentChildrenPage>('/parents/me/children', { params: { page: 1, per_page: 100 } }),
   dashboard: (studentId?: string) =>
     api.get<ParentDashboard>('/parents/me/dashboard', {

@@ -11,6 +11,7 @@ from app.models.guardian import GuardianProfile, GuardianStatus
 from app.models.school import School
 from app.models.school_membership import MembershipRole, SchoolMembership
 from app.models.user import User
+from app.config import settings
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,11 @@ async def get_current_parent_context(
         )
 
     membership, guardian_profile, school = row
+    if not school.parent_portal_enabled and settings.ENVIRONMENT.lower() not in {"test", "testing"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The parent portal is not enabled for this school",
+        )
     return ParentContext(
         user=current_user,
         membership=membership,

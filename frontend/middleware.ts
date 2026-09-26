@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRoleHome, isRouteInRoleSection } from '@/lib/roleRouting';
 
-const PUBLIC_ROUTES = ['/login', '/signup', '/set-password', '/select-school'];
-const LANDING_ROUTE = '/';
-
+const PUBLIC_ROUTES = ['/login', '/signup', '/set-password', '/forgot-password', '/reset-password', '/select-school'];
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
-  const isLanding = pathname === LANDING_ROUTE;
   const isDashboard = pathname.startsWith('/dashboard');
 
   // _auth_role is a JS-readable routing hint set on THIS domain by the auth

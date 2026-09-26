@@ -16,6 +16,7 @@ export interface Student {
   blood_group?: string;
   genotype?: string;
   class_id?: string;
+  class_name?: string;
   is_active: boolean;
   admission_date: string;
   created_at: string;
