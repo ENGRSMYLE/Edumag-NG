@@ -61,7 +61,7 @@ import type {
   GradeSubmissionRequest,
   AssignmentListParams,
 } from '@/types/assignment';
-import type { AppNotification, NotificationPage } from '@/types/notification';
+import type { AppNotification, NotificationPage, PushSubscriptionRequest, PushSubscriptionStatus, PushTestResponse } from '@/types/notification';
 import { useAuthStore } from '@/store/authStore';
 
 // ---------------------------------------------------------------------------
@@ -212,8 +212,8 @@ export const authApi = {
   logout: () =>
     api.post('/auth/logout'),
 
-  me: () =>
-    api.get<AuthUser>('/auth/me'),
+  me: (config?: { signal?: AbortSignal; timeout?: number }) =>
+    api.get<AuthUser>('/auth/me', config),
 
   setPassword: (data: SetPasswordRequest) =>
     api.post<TokenResponse>('/auth/set-password', data),
@@ -346,6 +346,10 @@ export const notificationsApi = {
   list: (params?: { page?: number; per_page?: number; unread_only?: boolean }) => api.get<NotificationPage>('/notifications', { params }),
   unreadCount: () => api.get<{ count: number }>('/notifications/unread-count'),
   markRead: (id: string) => api.patch<AppNotification>(`/notifications/${id}/read`),
+  pushStatus: (config?: { signal?: AbortSignal; timeout?: number }) => api.get<PushSubscriptionStatus>('/notifications/push/status', config),
+  subscribePush: (subscription: PushSubscriptionRequest) => api.post<PushSubscriptionStatus>('/notifications/push/subscribe', subscription),
+  unsubscribePush: (endpoint: string) => api.delete<PushSubscriptionStatus>('/notifications/push/unsubscribe', { data: { endpoint } }),
+  testPush: () => api.post<PushTestResponse>('/notifications/push/test'),
 };
 
 // ---------------------------------------------------------------------------

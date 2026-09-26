@@ -79,7 +79,10 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setUser(user) {
-        set({ user });
+        // A user returned by /auth/me has already been authenticated by the
+        // backend. This also restores client auth state when a standalone PWA
+        // starts with an empty sessionStorage but valid httpOnly cookies.
+        set({ user, isAuthenticated: true });
       },
 
       setAccessToken(token) {

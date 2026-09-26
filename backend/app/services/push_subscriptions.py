@@ -82,3 +82,41 @@ async def upsert_push_subscription(
     else:
         await db.flush()
     return subscription
+
+
+async def get_push_subscription_status(
+    db: AsyncSession, *, user_id: uuid.UUID, school_id: uuid.UUID
+) -> tuple[bool, int]:
+    await _require_active_membership(db, user_id=user_id, school_id=school_id)
+    subscriptions = list((await db.execute(
+        select(PushSubscription.id).where(
+            PushSubscription.user_id == user_id,
+            PushSubscription.school_id == school_id,
+            PushSubscription.is_active.is_(True),
+        )
+    )).scalars().all())
+    return bool(subscriptions), len(subscriptions)
+
+
+async def unsubscribe_push_subscription(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    school_id: uuid.UUID,
+    endpoint: str,
+) -> bool:
+    """Deactivate only the caller's subscription; missing rows are successful."""
+    await _require_active_membership(db, user_id=user_id, school_id=school_id)
+    subscription = (await db.execute(
+        select(PushSubscription).where(
+            PushSubscription.endpoint == endpoint,
+            PushSubscription.user_id == user_id,
+            PushSubscription.school_id == school_id,
+        )
+    )).scalar_one_or_none()
+    if subscription is None:
+        return False
+    if subscription.is_active:
+        subscription.is_active = False
+        await db.commit()
+    return True
