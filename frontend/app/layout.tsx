@@ -7,6 +7,7 @@ import {
 } from 'next/font/google';
 
 import { Providers } from '@/providers/Providers';
+import { ServiceWorkerRegistration } from '@/components/pwa/ServiceWorkerRegistration';
 import './globals.css';
 
 const bricolageGrotesque = Bricolage_Grotesque({
@@ -40,7 +41,11 @@ export const metadata: Metadata = {
   description:
     'Enterprise school management platform built for Nigerian schools.',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/icons/icon-192.png',
   },
 };
 
@@ -57,6 +62,7 @@ export default function RootLayout({
     >
       <body suppressHydrationWarning>
         <Providers>{children}</Providers>
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="EduMag NG">
+  <rect width="512" height="512" rx="112" fill="#0A1628"/>
+  <circle cx="256" cy="256" r="166" fill="#F5A623"/>
+  <path d="M108 218 256 142l148 76-148 76-148-76Z" fill="#0A1628"/>
+  <path d="M166 256v86c52 40 128 40 180 0v-86l-90 46-90-46Z" fill="#0A1628"/>
+  <path d="M396 226v92" stroke="#0A1628" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="396" cy="338" r="16" fill="#0A1628"/>
+</svg>
