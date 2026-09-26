@@ -14,7 +14,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TYPE role_enum ADD VALUE IF NOT EXISTS 'parent'")
+    # PostgreSQL enum additions must be committed before a later migration can
+    # use the new value. Alembic otherwise wraps a fresh multi-revision upgrade
+    # in one transaction and revision 012 fails when it compares role='parent'.
+    with op.get_context().autocommit_block():
+        op.execute("ALTER TYPE role_enum ADD VALUE IF NOT EXISTS 'parent'")
 
 
 def downgrade() -> None:

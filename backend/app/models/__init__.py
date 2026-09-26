@@ -16,6 +16,7 @@ from app.models.school_term import SchoolTerm
 from app.models.grading_system import GradingSystem
 from app.models.refresh_token import RefreshToken
 from app.models.email_verification import EmailVerification
+from app.models.push_subscription import PushSubscription
 
 __all__ = [
     "School",
@@ -38,4 +39,5 @@ __all__ = [
     "GradingSystem",
     "RefreshToken",
     "EmailVerification",
+    "PushSubscription",
 ]

@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import computed_field, field_validator
+import base64
+
+from pydantic import computed_field, field_validator, model_validator
 
 
 class Settings(BaseSettings):
@@ -33,6 +35,11 @@ class Settings(BaseSettings):
     INVITE_TOKEN_EXPIRE_HOURS: int = 48
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Optional in development; both values are required to enable Web Push.
+    WEB_PUSH_VAPID_PUBLIC_KEY: str | None = None
+    WEB_PUSH_VAPID_PRIVATE_KEY: str | None = None
+    WEB_PUSH_SUBJECT: str = "mailto:support@example.com"
+
     # Email
     RESEND_API_KEY: str
     FROM_EMAIL: str = "noreply@edumag.ng"
@@ -54,6 +61,36 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT.lower() == "production"
+
+    @model_validator(mode="after")
+    def validate_web_push_configuration(self):
+        public_key = self.WEB_PUSH_VAPID_PUBLIC_KEY
+        private_key = self.WEB_PUSH_VAPID_PRIVATE_KEY
+        if bool(public_key) != bool(private_key):
+            raise ValueError("WEB_PUSH_VAPID_PUBLIC_KEY and WEB_PUSH_VAPID_PRIVATE_KEY must be configured together")
+        if not public_key:
+            return self
+
+        def decode(value: str, field_name: str) -> bytes:
+            try:
+                return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+            except Exception as exc:
+                raise ValueError(f"{field_name} must be URL-safe base64") from exc
+
+        public_bytes = decode(public_key, "WEB_PUSH_VAPID_PUBLIC_KEY")
+        private_bytes = decode(private_key, "WEB_PUSH_VAPID_PRIVATE_KEY")
+        if len(public_bytes) != 65 or public_bytes[0] != 4:
+            raise ValueError("WEB_PUSH_VAPID_PUBLIC_KEY must be an uncompressed P-256 public key")
+        if len(private_bytes) != 32:
+            raise ValueError("WEB_PUSH_VAPID_PRIVATE_KEY must be a 32-byte P-256 private key")
+        if not (self.WEB_PUSH_SUBJECT.startswith("mailto:") or self.WEB_PUSH_SUBJECT.startswith("https://")):
+            raise ValueError("WEB_PUSH_SUBJECT must use mailto: or https://")
+        return self
+
+    @computed_field
+    @property
+    def web_push_enabled(self) -> bool:
+        return bool(self.WEB_PUSH_VAPID_PUBLIC_KEY and self.WEB_PUSH_VAPID_PRIVATE_KEY)
 
 
 settings = Settings()
