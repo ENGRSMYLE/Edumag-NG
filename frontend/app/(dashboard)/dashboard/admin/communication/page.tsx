@@ -22,6 +22,8 @@ import {
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Badge } from '@/components/shared/Badge';
+import { PushNotificationSettings } from '@/components/pwa/PushNotificationSettings';
+import { NotificationPreferences } from '@/components/pwa/NotificationPreferences';
 import { useAnnouncements, useInbox, useMarkRead } from '@/hooks/useCommunication';
 import { formatRelativeTime } from '@/lib/formatters';
 import { communicationApi } from '@/lib/api';
@@ -548,6 +550,16 @@ export default function AdminCommunicationPage() {
           )
         }
       />
+
+      <details className="card-shell overflow-hidden">
+        <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-[var(--color-text-primary)]">
+          Phone and browser notifications
+        </summary>
+        <div className="grid gap-5 border-t border-[var(--color-border)] p-4 lg:grid-cols-2">
+          <PushNotificationSettings />
+          <NotificationPreferences />
+        </div>
+      </details>
 
       <div className="card-shell">
         <div className="card-core">
