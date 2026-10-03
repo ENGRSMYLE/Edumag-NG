@@ -38,6 +38,12 @@ test('subscribe and unsubscribe send only subscription material, never identity'
   assert.equal(/user_id|school_id/.test(pushBlock), false);
 });
 
+test('push status requires agreement between the browser and backend', () => {
+  assert.ok(settings.includes("subscription !== null && statusQuery.data?.subscribed === true"));
+  assert.ok(settings.includes('sameApplicationServerKey(nextSubscription, applicationServerKey)'));
+  assert.ok(settings.includes('await nextSubscription.unsubscribe()'));
+});
+
 test('registration has update handling and removes every installed listener', () => {
   for (const marker of [
     "navigator.serviceWorker.register('/sw.js'",

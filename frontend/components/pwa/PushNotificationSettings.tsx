@@ -14,6 +14,14 @@ function vapidKey(value: string): ArrayBuffer {
   return Uint8Array.from(decoded, character => character.charCodeAt(0)).buffer;
 }
 
+function sameApplicationServerKey(subscription: PushSubscription, expectedKey: ArrayBuffer) {
+  const currentKey = subscription.options.applicationServerKey;
+  if (!currentKey) return false;
+  const current = new Uint8Array(currentKey);
+  const expected = new Uint8Array(expectedKey);
+  return current.length === expected.length && current.every((byte, index) => byte === expected[index]);
+}
+
 function supportsPush() {
   return typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
 }
@@ -121,8 +129,13 @@ export function PushNotificationSettings() {
 
       const registration = await getOrRegisterServiceWorker();
       let nextSubscription = await registration.pushManager.getSubscription();
+      const applicationServerKey = vapidKey(publicKey);
+      if (nextSubscription && !sameApplicationServerKey(nextSubscription, applicationServerKey)) {
+        await nextSubscription.unsubscribe();
+        nextSubscription = null;
+      }
       if (!nextSubscription) {
-        nextSubscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey(publicKey) });
+        nextSubscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
         created = nextSubscription;
       }
       const value = nextSubscription.toJSON();
@@ -162,7 +175,7 @@ export function PushNotificationSettings() {
   const serverConfigured = statusQuery.data?.server_configured === true && publicKey.length > 0;
   const schoolEnabled = statusQuery.data?.school_enabled === true;
   const configured = serverConfigured && schoolEnabled;
-  const subscribed = permission === 'granted' && subscription !== null;
+  const subscribed = permission === 'granted' && subscription !== null && statusQuery.data?.subscribed === true;
   const loading = supported === null || checking || (supported === true && statusQuery.isLoading);
   const visibleError = actionError ?? (statusQuery.error ? messageFrom(statusQuery.error) : null);
 
@@ -176,6 +189,7 @@ export function PushNotificationSettings() {
         {loading ? <div className="flex items-center gap-2 text-sm text-slate-500" role="status"><Loader2 className="h-4 w-4 animate-spin" />Checking notification availability…</div>
           : !supported ? <Status icon={BellOff} title="Not supported on this browser">Try an up-to-date browser that supports service workers and web push.</Status>
           : !online ? <Status icon={WifiOff} title="You are offline">Reconnect to change your notification settings.</Status>
+          : statusQuery.isError ? <Status icon={AlertTriangle} title="Could not check push availability">Try again or confirm that the API server is reachable.</Status>
           : !schoolEnabled ? <Status icon={AlertTriangle} title="Push is unavailable">The school has not enabled push notifications yet.</Status>
           : !serverConfigured ? <Status icon={AlertTriangle} title="Server setup required">Push notifications are enabled for this school, but the server VAPID credentials are not configured.</Status>
           : permission === 'denied' ? <Status icon={BellOff} title="Notifications are blocked">This browser will not prompt again. Allow notifications in the site permissions, then return here.</Status>
