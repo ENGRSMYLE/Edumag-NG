@@ -1,7 +1,15 @@
 export type NotificationEventType = 'parent_linked' | 'message_received' | 'result_published' | 'student_absent' | 'assignment_created' | 'fee_reminder' | 'announcement_published';
 export interface AppNotification { id: string; event_type: NotificationEventType; title: string; body: string; data: Record<string, unknown>; is_read: boolean; read_at?: string | null; created_at: string }
 export interface NotificationPage { items: AppNotification[]; total: number; page: number; per_page: number; unread_count: number }
-export interface PushSubscriptionStatus { supported: boolean; configured: boolean; subscribed: boolean; device_count: number }
+export interface PushSubscriptionStatus {
+  supported: boolean;
+  configured: boolean;
+  server_configured: boolean;
+  school_enabled: boolean;
+  public_key?: string | null;
+  subscribed: boolean;
+  device_count: number;
+}
 export interface PushSubscriptionRequest {
   endpoint: string;
   keys: { p256dh: string; auth: string };

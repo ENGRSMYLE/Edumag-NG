@@ -48,6 +48,21 @@ async def _push_rollout_enabled(db: AsyncSession, school_id: uuid.UUID) -> bool:
     )).scalar_one_or_none())
 
 
+def _push_status_response(
+    *, school_enabled: bool, subscribed: bool, device_count: int
+) -> PushSubscriptionStatus:
+    server_configured = settings.web_push_enabled
+    configured = server_configured and school_enabled
+    return PushSubscriptionStatus(
+        configured=configured,
+        server_configured=server_configured,
+        school_enabled=school_enabled,
+        public_key=settings.WEB_PUSH_VAPID_PUBLIC_KEY if configured else None,
+        subscribed=subscribed,
+        device_count=device_count,
+    )
+
+
 @router.get("/operations")
 async def notification_operations(
     user: User = Depends(require_role("super_admin", "admin")),
@@ -72,8 +87,8 @@ async def push_status(
     subscribed, device_count = await get_push_subscription_status(
         db, user_id=user.id, school_id=user.current_school_id  # type: ignore[attr-defined]
     )
-    return PushSubscriptionStatus(
-        configured=settings.web_push_enabled and await _push_rollout_enabled(db, user.current_school_id),  # type: ignore[attr-defined]
+    return _push_status_response(
+        school_enabled=await _push_rollout_enabled(db, user.current_school_id),  # type: ignore[attr-defined]
         subscribed=subscribed,
         device_count=device_count,
     )
@@ -102,7 +117,11 @@ async def subscribe_push(
     subscribed, device_count = await get_push_subscription_status(
         db, user_id=user.id, school_id=user.current_school_id  # type: ignore[attr-defined]
     )
-    return PushSubscriptionStatus(configured=True, subscribed=subscribed, device_count=device_count)
+    return _push_status_response(
+        school_enabled=True,
+        subscribed=subscribed,
+        device_count=device_count,
+    )
 
 
 @router.delete("/push/unsubscribe", response_model=PushSubscriptionStatus)
@@ -122,8 +141,8 @@ async def unsubscribe_push(
     subscribed, device_count = await get_push_subscription_status(
         db, user_id=user.id, school_id=user.current_school_id  # type: ignore[attr-defined]
     )
-    return PushSubscriptionStatus(
-        configured=settings.web_push_enabled and await _push_rollout_enabled(db, user.current_school_id),  # type: ignore[attr-defined]
+    return _push_status_response(
+        school_enabled=await _push_rollout_enabled(db, user.current_school_id),  # type: ignore[attr-defined]
         subscribed=subscribed,
         device_count=device_count,
     )

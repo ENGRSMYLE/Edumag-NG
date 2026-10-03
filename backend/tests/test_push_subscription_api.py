@@ -52,7 +52,15 @@ async def test_subscribe_status_duplicate_multiple_devices_and_unsubscribe(clien
 
     empty = await client.get("/api/notifications/push/status", headers=headers)
     assert empty.status_code == 200
-    assert empty.json() == {"supported": True, "configured": True, "subscribed": False, "device_count": 0}
+    assert empty.json() == {
+        "supported": True,
+        "configured": True,
+        "server_configured": True,
+        "school_enabled": True,
+        "public_key": "configured",
+        "subscribed": False,
+        "device_count": 0,
+    }
 
     endpoint_one = "https://push.example/device-one"
     first = await client.post("/api/notifications/push/subscribe", json=_body(endpoint_one), headers=headers)

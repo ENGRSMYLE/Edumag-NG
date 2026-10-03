@@ -41,7 +41,7 @@ async function getOrRegisterServiceWorker() {
 }
 
 export function PushNotificationSettings() {
-  const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY?.trim() ?? '';
+  const buildPublicKey = process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY?.trim() ?? '';
   const lock = useRef(false);
   const [supported, setSupported] = useState<boolean | null>(null);
   const [online, setOnline] = useState(true);
@@ -60,6 +60,7 @@ export function PushNotificationSettings() {
     retry: 1,
   });
   const refetchStatus = statusQuery.refetch;
+  const publicKey = statusQuery.data?.public_key?.trim() || buildPublicKey;
 
   const inspectBrowser = useCallback(async () => {
     const browserSupported = supportsPush();
@@ -158,7 +159,9 @@ export function PushNotificationSettings() {
     }
   };
 
-  const configured = statusQuery.data?.configured === true && publicKey.length > 0;
+  const serverConfigured = statusQuery.data?.server_configured === true && publicKey.length > 0;
+  const schoolEnabled = statusQuery.data?.school_enabled === true;
+  const configured = serverConfigured && schoolEnabled;
   const subscribed = permission === 'granted' && subscription !== null;
   const loading = supported === null || checking || (supported === true && statusQuery.isLoading);
   const visibleError = actionError ?? (statusQuery.error ? messageFrom(statusQuery.error) : null);
@@ -173,7 +176,8 @@ export function PushNotificationSettings() {
         {loading ? <div className="flex items-center gap-2 text-sm text-slate-500" role="status"><Loader2 className="h-4 w-4 animate-spin" />Checking notification availability…</div>
           : !supported ? <Status icon={BellOff} title="Not supported on this browser">Try an up-to-date browser that supports service workers and web push.</Status>
           : !online ? <Status icon={WifiOff} title="You are offline">Reconnect to change your notification settings.</Status>
-          : !configured ? <Status icon={AlertTriangle} title="Push is unavailable">The school has not enabled push notifications on the server yet.</Status>
+          : !schoolEnabled ? <Status icon={AlertTriangle} title="Push is unavailable">The school has not enabled push notifications yet.</Status>
+          : !serverConfigured ? <Status icon={AlertTriangle} title="Server setup required">Push notifications are enabled for this school, but the server VAPID credentials are not configured.</Status>
           : permission === 'denied' ? <Status icon={BellOff} title="Notifications are blocked">This browser will not prompt again. Allow notifications in the site permissions, then return here.</Status>
           : subscribed ? <Status icon={CheckCircle2} title="Enabled on this device" success>This device is subscribed. Your account has {statusQuery.data?.device_count ?? 1} active notification {(statusQuery.data?.device_count ?? 1) === 1 ? 'device' : 'devices'}.</Status>
           : permission === 'granted' ? <Status icon={Smartphone} title="Permission granted — device not subscribed">Select Enable notifications to register this browser with your account.</Status>

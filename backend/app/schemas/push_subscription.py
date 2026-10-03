@@ -39,6 +39,9 @@ class PushUnsubscribeRequest(BaseModel):
 class PushSubscriptionStatus(BaseModel):
     supported: bool = True
     configured: bool
+    server_configured: bool
+    school_enabled: bool
+    public_key: str | None = None
     subscribed: bool
     device_count: int
 
