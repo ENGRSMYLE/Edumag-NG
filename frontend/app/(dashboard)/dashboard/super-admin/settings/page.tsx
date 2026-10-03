@@ -583,7 +583,11 @@ function SystemTab({ settings }: { settings?: SchoolSettings }) {
   });
   const pushRollout = useMutation({
     mutationFn: (enabled: boolean) => settingsApi.updateSchool({ push_notifications_enabled: enabled }),
-    onSuccess: () => { toast.success('Push notification rollout setting updated'); queryClient.invalidateQueries({ queryKey: ['settings', 'school'] }); },
+    onSuccess: () => {
+      toast.success('Push notification rollout setting updated');
+      void queryClient.invalidateQueries({ queryKey: ['settings', 'school'] });
+      void queryClient.invalidateQueries({ queryKey: ['notifications', 'push', 'status'] });
+    },
     onError: () => toast.error('Could not update push notification rollout'),
   });
 
