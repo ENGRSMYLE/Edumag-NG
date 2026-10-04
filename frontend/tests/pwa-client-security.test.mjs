@@ -44,6 +44,13 @@ test('push status requires agreement between the browser and backend', () => {
   assert.ok(settings.includes('await nextSubscription.unsubscribe()'));
 });
 
+test('logout detaches the current browser push subscription', () => {
+  assert.ok(api.includes('await detachCurrentBrowserPush(true)'));
+  assert.ok(api.includes("await subscription.unsubscribe()"));
+  assert.ok(api.includes("api.delete('/notifications/push/unsubscribe'"));
+  assert.ok(api.includes('void detachCurrentBrowserPush(false)'));
+});
+
 test('registration has update handling and removes every installed listener', () => {
   for (const marker of [
     "navigator.serviceWorker.register('/sw.js'",

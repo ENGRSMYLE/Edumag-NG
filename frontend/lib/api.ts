@@ -205,9 +205,33 @@ api.interceptors.response.use(
 
 function _forceLogout() {
   authDebug('clearing invalid authentication state');
+  void detachCurrentBrowserPush(false);
   useAuthStore.getState().logout();
   if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
     window.location.href = '/login';
+  }
+}
+
+async function detachCurrentBrowserPush(notifyServer: boolean): Promise<void> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration('/');
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) return;
+    if (notifyServer) {
+      try {
+        await api.delete('/notifications/push/unsubscribe', {
+          data: { endpoint: subscription.endpoint },
+          timeout: 10_000,
+        });
+      } catch {
+        // Logout must continue. The provider will eventually return 404/410
+        // for the stale server record after the local subscription is removed.
+      }
+    }
+    await subscription.unsubscribe();
+  } catch {
+    // Browser push cleanup is best-effort and must never block logout.
   }
 }
 
@@ -231,8 +255,10 @@ export const authApi = {
   mySchools: () =>
     api.get<SchoolOption[]>('/auth/my-schools'),
 
-  logout: () =>
-    api.post('/auth/logout', undefined, { timeout: 15_000 }),
+  logout: async () => {
+    await detachCurrentBrowserPush(true);
+    return api.post('/auth/logout', undefined, { timeout: 15_000 });
+  },
 
   me: (config?: { signal?: AbortSignal; timeout?: number }) =>
     api.get<AuthUser>('/auth/me', { timeout: 15_000, ...config }),
