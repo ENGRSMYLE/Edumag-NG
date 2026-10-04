@@ -25,6 +25,13 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: 'inactive', label: 'Inactive' },
 ];
 
+const ROLE_LABELS: Record<UserRole, string> = {
+  super_admin: 'Super Admin',
+  admin: 'Admin',
+  teacher: 'Teacher',
+  parent: 'Parent',
+};
+
 function InitialsAvatar({ name }: { name: string }) {
   return (
     <div className="flex items-center gap-2.5">
@@ -52,6 +59,7 @@ export default function StaffPage() {
   const queryParams = {
     page,
     per_page: 20,
+    staff_only: true,
     search: search || undefined,
     role: filter === 'admin' ? ('admin' as UserRole) : filter === 'teacher' ? ('teacher' as UserRole) : undefined,
     is_active: filter === 'inactive' ? false : undefined,
@@ -98,8 +106,8 @@ export default function StaffPage() {
       key: 'role',
       header: 'Role',
       render: (v) => (
-        <Badge variant={v === 'admin' ? 'info' : 'neutral'}>
-          {v === 'admin' ? 'Admin' : 'Teacher'}
+        <Badge variant={v === 'super_admin' || v === 'admin' ? 'info' : 'neutral'}>
+          {ROLE_LABELS[v as UserRole] ?? String(v)}
         </Badge>
       ),
     },

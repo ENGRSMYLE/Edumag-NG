@@ -43,6 +43,7 @@ export interface UserListParams {
   page?: number;
   per_page?: number;
   role?: UserRole;
+  staff_only?: boolean;
   is_active?: boolean;
   search?: string;
 }

@@ -225,6 +225,7 @@ async def list_users(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     role: str | None = Query(None),
+    staff_only: bool = Query(False),
     is_active: bool | None = Query(None),
     search: str | None = Query(None),
     current_user: User = Depends(require_role("super_admin", "admin")),
@@ -244,6 +245,12 @@ async def list_users(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Invalid role: {role}",
             )
+    elif staff_only:
+        base_q = base_q.where(SchoolMembership.role.in_([
+            MembershipRole.super_admin,
+            MembershipRole.admin,
+            MembershipRole.teacher,
+        ]))
 
     if is_active is not None:
         base_q = base_q.where(SchoolMembership.is_active == is_active)
