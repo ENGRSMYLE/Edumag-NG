@@ -42,6 +42,8 @@ test('push status requires agreement between the browser and backend', () => {
   assert.ok(settings.includes("subscription !== null && statusQuery.data?.subscribed === true"));
   assert.ok(settings.includes('sameApplicationServerKey(nextSubscription, applicationServerKey)'));
   assert.ok(settings.includes('await nextSubscription.unsubscribe()'));
+  assert.ok(settings.includes('server_configured ?? statusQuery.data?.configured'));
+  assert.ok(settings.includes('school_enabled ?? statusQuery.data?.configured'));
 });
 
 test('logout detaches the current browser push subscription', () => {
@@ -49,6 +51,12 @@ test('logout detaches the current browser push subscription', () => {
   assert.ok(api.includes("await subscription.unsubscribe()"));
   assert.ok(api.includes("api.delete('/notifications/push/unsubscribe'"));
   assert.ok(api.includes('void detachCurrentBrowserPush(false)'));
+});
+
+test('subscribed devices can queue an explicit test notification', () => {
+  assert.ok(settings.includes('await notificationsApi.testPush()'));
+  assert.ok(settings.includes('Send test notification'));
+  assert.ok(api.includes("api.post<PushTestResponse>('/notifications/push/test')"));
 });
 
 test('registration has update handling and removes every installed listener', () => {

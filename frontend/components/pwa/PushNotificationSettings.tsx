@@ -56,7 +56,7 @@ export function PushNotificationSettings() {
   const [permission, setPermission] = useState<BrowserPermission>('unsupported');
   const [subscription, setSubscription] = useState<PushSubscription | null>(null);
   const [checking, setChecking] = useState(true);
-  const [action, setAction] = useState<'enable' | 'disable' | null>(null);
+  const [action, setAction] = useState<'enable' | 'disable' | 'test' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showIosHelp, setShowIosHelp] = useState(false);
 
@@ -172,8 +172,27 @@ export function PushNotificationSettings() {
     }
   };
 
-  const serverConfigured = statusQuery.data?.server_configured === true && publicKey.length > 0;
-  const schoolEnabled = statusQuery.data?.school_enabled === true;
+  const sendTest = async () => {
+    if (lock.current || !subscribed || !online) return;
+    lock.current = true;
+    setAction('test');
+    setActionError(null);
+    try {
+      await notificationsApi.testPush();
+      toast.success('Test notification queued. It should arrive shortly.');
+    } catch (error) {
+      setActionError(messageFrom(error));
+    } finally {
+      setAction(null);
+      lock.current = false;
+    }
+  };
+
+  // During a rolling deployment, an older API may only return `configured`.
+  // Fall back to that combined flag so the enable button does not become
+  // incorrectly disabled while the backend instance is being upgraded.
+  const serverConfigured = (statusQuery.data?.server_configured ?? statusQuery.data?.configured) === true && publicKey.length > 0;
+  const schoolEnabled = (statusQuery.data?.school_enabled ?? statusQuery.data?.configured) === true;
   const configured = serverConfigured && schoolEnabled;
   const subscribed = permission === 'granted' && subscription !== null && statusQuery.data?.subscribed === true;
   const loading = supported === null || checking || (supported === true && statusQuery.isLoading);
@@ -203,6 +222,7 @@ export function PushNotificationSettings() {
         <div className="flex flex-col gap-2 sm:flex-row">
           {subscribed ? <button type="button" onClick={disable} disabled={action !== null || !online} className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50 sm:w-auto">{action === 'disable' ? 'Disabling…' : 'Disable on this device'}</button>
             : <button type="button" onClick={enable} disabled={action !== null || !online || !supported || !configured || permission === 'denied'} className="w-full rounded-lg bg-[var(--color-navy)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto">{action === 'enable' ? 'Enabling…' : 'Enable notifications'}</button>}
+          {subscribed && <button type="button" onClick={sendTest} disabled={action !== null || !online} className="w-full rounded-lg bg-[var(--color-navy)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto">{action === 'test' ? 'Sending…' : 'Send test notification'}</button>}
           {statusQuery.isError && online && <button type="button" onClick={() => void refetchStatus()} disabled={statusQuery.isFetching} className="w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50 sm:w-auto">Try again</button>}
         </div>
       </div>
