@@ -12,6 +12,8 @@ class PushSubscriptionRequest(BaseModel):
     endpoint: str = Field(min_length=12, max_length=2048)
     keys: PushSubscriptionKeys
     device_name: str | None = Field(default=None, max_length=255)
+    # PushSubscription.expirationTime is epoch milliseconds when provided.
+    expiration_time: int | None = Field(default=None, ge=0, le=253_402_300_799_000)
 
     model_config = {"extra": "forbid"}
 

@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import base64
 
-from pydantic import computed_field, field_validator, model_validator
+from pydantic import Field, computed_field, field_validator, model_validator
 
 
 class Settings(BaseSettings):
@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     WEB_PUSH_VAPID_PUBLIC_KEY: str | None = None
     WEB_PUSH_VAPID_PRIVATE_KEY: str | None = None
     WEB_PUSH_SUBJECT: str = "mailto:support@example.com"
+    # Push services may retain an accepted message for this long while a
+    # device is offline. RFC 8030 permits the service to shorten the value.
+    WEB_PUSH_TTL_SECONDS: int = Field(default=86_400, ge=0, le=2_147_483_648)
     PUSH_OUTBOX_MAX_ATTEMPTS: int = 6
     PUSH_OUTBOX_BASE_RETRY_SECONDS: int = 30
     PUSH_OUTBOX_MAX_RETRY_SECONDS: int = 3600

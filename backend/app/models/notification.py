@@ -22,6 +22,8 @@ class NotificationChannel(str, enum.Enum):
 class OutboxStatus(str, enum.Enum):
     pending = "pending"
     processing = "processing"
+    accepted = "accepted"
+    # Kept temporarily so pre-migration rows can still be read.
     delivered = "delivered"
     retry = "retry"
     failed = "failed"
@@ -92,5 +94,5 @@ class NotificationOutbox(Base):
         UniqueConstraint("notification_id", "channel", name="uq_notification_outbox_notification_channel"),
         CheckConstraint("attempt_count >= 0", name="ck_notification_outbox_attempt_count_nonnegative"),
         CheckConstraint("channel IN ('push')", name="ck_notification_outbox_channel"),
-        CheckConstraint("status IN ('pending', 'processing', 'delivered', 'retry', 'failed')", name="ck_notification_outbox_status"),
+        CheckConstraint("status IN ('pending', 'processing', 'accepted', 'delivered', 'retry', 'failed')", name="ck_notification_outbox_status"),
     )

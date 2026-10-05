@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -23,6 +24,7 @@ from app.models.push_subscription import PushSubscription
 from app.models.school_membership import MembershipRole, SchoolMembership
 from app.services.notification_policy import build_push_payload
 
+logger = logging.getLogger(__name__)
 
 class DeliveryDisposition(str, Enum):
     success = "success"
@@ -73,13 +75,13 @@ class PushNotificationChannel:
         private_key: str | None = None,
         subject: str | None = None,
         timeout_seconds: float = 10.0,
-        ttl_seconds: int = 300,
+        ttl_seconds: int | None = None,
     ) -> None:
         self._sender = sender or _default_sender
         self._private_key = private_key if private_key is not None else settings.WEB_PUSH_VAPID_PRIVATE_KEY
         self._subject = subject or settings.WEB_PUSH_SUBJECT
         self._timeout_seconds = timeout_seconds
-        self._ttl_seconds = ttl_seconds
+        self._ttl_seconds = ttl_seconds if ttl_seconds is not None else settings.WEB_PUSH_TTL_SECONDS
 
     async def send(
         self,
@@ -94,6 +96,19 @@ class PushNotificationChannel:
                 subscription_id=str(subscription.id),
                 disposition=DeliveryDisposition.permanent_failure,
                 error_type="inactive_subscription",
+            )
+        if subscription.expires_at is not None and subscription.expires_at <= now:
+            subscription.is_active = False
+            subscription.failure_count += 1
+            subscription.last_failure_at = now
+            logger.warning(
+                "[Push] Failed: subscription expired subscription_id=%s",
+                subscription.id,
+            )
+            return PushDeliveryResult(
+                subscription_id=str(subscription.id),
+                disposition=DeliveryDisposition.permanent_failure,
+                error_type="subscription_expired",
             )
         if not self._private_key:
             subscription.failure_count += 1
@@ -111,6 +126,7 @@ class PushNotificationChannel:
                 "body": safe.body,
                 "url": safe.url,
                 "event_type": safe.event_type,
+                "notification_id": str(notification.id),
             },
             separators=(",", ":"),
         )
@@ -119,8 +135,16 @@ class PushNotificationChannel:
             "keys": {"p256dh": subscription.p256dh_key, "auth": subscription.auth_key},
         }
 
+        logger.info(
+            "[Push] Sending notification notification_id=%s subscription_id=%s ttl_seconds=%s",
+            notification.id,
+            subscription.id,
+            self._ttl_seconds,
+        )
+        logger.info("[Push] Subscription found subscription_id=%s", subscription.id)
+
         try:
-            await asyncio.wait_for(
+            response = await asyncio.wait_for(
                 asyncio.to_thread(
                     self._sender,
                     subscription_info=provider_subscription,
@@ -141,6 +165,13 @@ class PushNotificationChannel:
                 subscription.is_active = False
             # Deliberately retain only the exception class. Provider exception
             # text can include endpoints or request details and is never logged.
+            logger.warning(
+                "[Push] Failed status=%s error_type=%s subscription_id=%s expired=%s",
+                status_code if status_code is not None else "unavailable",
+                type(error).__name__,
+                subscription.id,
+                status_code in {404, 410},
+            )
             return PushDeliveryResult(
                 subscription_id=str(subscription.id),
                 disposition=disposition,
@@ -150,9 +181,17 @@ class PushNotificationChannel:
 
         subscription.failure_count = 0
         subscription.last_success_at = now
+        status_code = getattr(response, "status_code", None)
+        logger.info(
+            "[Push] Push service accepted notification notification_id=%s subscription_id=%s status=%s",
+            notification.id,
+            subscription.id,
+            status_code if isinstance(status_code, int) else "accepted",
+        )
         return PushDeliveryResult(
             subscription_id=str(subscription.id),
             disposition=DeliveryDisposition.success,
+            status_code=status_code if isinstance(status_code, int) else None,
         )
 
     async def send_many(

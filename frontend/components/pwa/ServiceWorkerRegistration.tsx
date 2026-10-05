@@ -50,7 +50,7 @@ export function ServiceWorkerRegistration() {
       if (!event.data || typeof event.data !== 'object') return;
       const message = event.data as {
         type?: unknown;
-        subscription?: { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } };
+        subscription?: { endpoint?: unknown; expirationTime?: unknown; keys?: { p256dh?: unknown; auth?: unknown } };
       };
       if (message.type !== 'PUSH_SUBSCRIPTION_CHANGED' || !useAuthStore.getState().isAuthenticated) return;
       const endpoint = message.subscription?.endpoint;
@@ -64,6 +64,7 @@ export function ServiceWorkerRegistration() {
         endpoint,
         keys: { p256dh, auth },
         device_name: navigator.userAgent.slice(0, 255),
+        expiration_time: typeof message.subscription?.expirationTime === 'number' ? message.subscription.expirationTime : null,
       }).catch((error: unknown) => console.error('Push subscription synchronization failed', error));
     };
 

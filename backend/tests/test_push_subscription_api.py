@@ -222,7 +222,7 @@ async def test_push_test_queues_only_the_current_users_notification(client, test
     monkeypatch.setattr(settings, "WEB_PUSH_VAPID_PUBLIC_KEY", "configured")
     monkeypatch.setattr(settings, "WEB_PUSH_VAPID_PRIVATE_KEY", "configured")
     async def delivered(*args, **kwargs):
-        return OutboxStatus.delivered
+        return OutboxStatus.accepted
     monkeypatch.setattr("app.routers.notifications.process_outbox_record", delivered)
     factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as db:
@@ -237,7 +237,7 @@ async def test_push_test_queues_only_the_current_users_notification(client, test
     response = await client.post("/api/notifications/push/test", headers=headers)
     assert response.status_code == 200
     assert response.json()["message"] == "Test notification sent"
-    assert response.json()["delivery_status"] == "delivered"
+    assert response.json()["delivery_status"] == "accepted"
 
     async with factory() as db:
         notifications = list((await db.execute(select(Notification))).scalars().all())

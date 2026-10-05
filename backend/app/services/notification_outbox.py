@@ -58,11 +58,11 @@ async def get_outbox_metrics(db: AsyncSession, *, school_id=None) -> dict:
         select(NotificationOutbox.status, NotificationOutbox.created_at, NotificationOutbox.processed_at)
         .join(Notification, Notification.id == NotificationOutbox.notification_id)
         .where(
-            NotificationOutbox.status.in_([OutboxStatus.delivered, OutboxStatus.failed]),
+            NotificationOutbox.status.in_([OutboxStatus.accepted, OutboxStatus.delivered, OutboxStatus.failed]),
             *notification_scope,
         )
     )).all()
-    delivered_count = sum(row.status == OutboxStatus.delivered for row in terminal_rows)
+    accepted_count = sum(row.status in {OutboxStatus.accepted, OutboxStatus.delivered} for row in terminal_rows)
     terminal_count = len(terminal_rows)
     latencies = [
         (row.processed_at - row.created_at).total_seconds()
@@ -78,8 +78,8 @@ async def get_outbox_metrics(db: AsyncSession, *, school_id=None) -> dict:
         "subscription_active_rate": round(active_subscriptions / total_subscriptions, 4) if total_subscriptions else None,
         "expired_subscription_count": expired_subscriptions,
         "expired_subscription_rate": round(expired_subscriptions / total_subscriptions, 4) if total_subscriptions else None,
-        "delivered_outbox_count": delivered_count,
-        "delivery_success_rate": round(delivered_count / terminal_count, 4) if terminal_count else None,
+        "push_service_accepted_count": accepted_count,
+        "push_service_acceptance_rate": round(accepted_count / terminal_count, 4) if terminal_count else None,
         "average_worker_latency_seconds": round(sum(latencies) / len(latencies), 3) if latencies else None,
         # These require explicit, consent-aware browser analytics and are not
         # inferred from delivery data.
@@ -170,14 +170,16 @@ async def process_outbox_record(
 
     try:
         results = await deliver_notification_push(db, notification, channel=channel, commit=False)
+        accepted = any(result.disposition == DeliveryDisposition.success for result in results)
         retryable = any(result.retryable for result in results)
-        non_expiry_permanent = any(
-            result.disposition == DeliveryDisposition.permanent_failure
-            and result.status_code not in {404, 410}
-            for result in results
-        )
         maximum = max_attempts or settings.PUSH_OUTBOX_MAX_ATTEMPTS
-        if retryable and row.attempt_count < maximum:
+        if accepted:
+            # At least one device's push service accepted the message. Avoid
+            # retrying the whole notification and duplicating it on that device.
+            row.status = OutboxStatus.accepted
+            row.processed_at = current
+            row.last_error = _summarize_failure(results) or None
+        elif retryable and row.attempt_count < maximum:
             row.status = OutboxStatus.retry
             row.available_at = current + retry_delay(
                 row.attempt_count,
@@ -185,15 +187,10 @@ async def process_outbox_record(
                 maximum_seconds=max_retry_seconds or settings.PUSH_OUTBOX_MAX_RETRY_SECONDS,
             )
             row.last_error = _summarize_failure(results)
-        elif retryable or non_expiry_permanent:
-            row.status = OutboxStatus.failed
-            row.last_error = _summarize_failure(results)
         else:
-            # No devices and expired devices are terminal successful processing:
-            # there is nothing retryable left to deliver.
-            row.status = OutboxStatus.delivered
+            row.status = OutboxStatus.failed
             row.processed_at = current
-            row.last_error = _summarize_failure(results) or None
+            row.last_error = _summarize_failure(results) or "no_active_subscription"
     except Exception as error:
         maximum = max_attempts or settings.PUSH_OUTBOX_MAX_ATTEMPTS
         row.last_error = type(error).__name__[:1000]

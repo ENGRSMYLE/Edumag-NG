@@ -1,6 +1,6 @@
 /* EduMag PWA service worker. No fetch handler: private data stays network-only. */
 
-const VERSION = 'edumag-pwa-v2';
+const VERSION = 'edumag-pwa-v3';
 const FALLBACK_PATH = '/dashboard';
 const FALLBACK_TITLE = 'EduMag NG';
 const FALLBACK_BODY = 'You have a new school notification.';
@@ -71,7 +71,9 @@ self.addEventListener('push', (event) => {
       body: safeText(payload.body, FALLBACK_BODY, 240),
       icon: ICON,
       badge: BADGE,
-      tag: safeTag(payload.event_type),
+      // A unique tag prevents two offline messages of the same event type
+      // from replacing each other when the push service releases its backlog.
+      tag: safeTag(payload.notification_id || payload.event_type),
       data: { path: safeDestination(payload.url) },
     },
   ));

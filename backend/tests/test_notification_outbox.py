@@ -91,7 +91,7 @@ async def test_delivery_is_idempotent_and_stale_lease_is_recoverable(client, tes
         duplicate = await process_outbox_record(db, recovered[0], channel=channel, now=now)
         row = (await db.execute(select(NotificationOutbox))).scalar_one()
         metrics = await get_outbox_metrics(db, school_id=school_id)
-    assert status == OutboxStatus.delivered
+    assert status == OutboxStatus.accepted
     assert duplicate is None and calls == 1
     assert row.processed_at == now and row.attempt_count == 2
     assert metrics["pending_outbox_count"] == 0

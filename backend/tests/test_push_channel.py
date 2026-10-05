@@ -43,6 +43,18 @@ async def test_success_records_delivery_and_uses_safe_payload() -> None:
     assert item.last_success_at is not None and item.failure_count == 0
     assert payload["title"] == "New academic result"
     assert "Private score" not in sent["data"] and "Sensitive body" not in sent["data"]
+    assert sent["ttl"] == 86_400
+    assert payload["notification_id"]
+
+
+@pytest.mark.asyncio
+async def test_custom_ttl_is_passed_to_pywebpush() -> None:
+    sent = {}
+    def sender(**kwargs): sent.update(kwargs)
+    await PushNotificationChannel(
+        sender=sender, private_key="secret", ttl_seconds=43_200,
+    ).send(notification(), subscription("https://push.example/ttl"), role=MembershipRole.parent)
+    assert sent["ttl"] == 43_200
 
 
 @pytest.mark.asyncio

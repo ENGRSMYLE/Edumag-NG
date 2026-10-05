@@ -14,6 +14,7 @@ export interface PushSubscriptionRequest {
   endpoint: string;
   keys: { p256dh: string; auth: string };
   device_name?: string;
+  expiration_time?: number | null;
 }
 export interface PushTestResponse { message: string; notification_id: string; delivery_status: string }
 export interface NotificationPreference {

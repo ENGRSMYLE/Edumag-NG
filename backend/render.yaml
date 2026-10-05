@@ -43,6 +43,8 @@ services:
         sync: false
       - key: WEB_PUSH_SUBJECT
         sync: false
+      - key: WEB_PUSH_TTL_SECONDS
+        value: 86400
 
   - type: worker
     name: edumag-notification-worker
@@ -90,6 +92,8 @@ services:
         sync: false
       - key: WEB_PUSH_SUBJECT
         sync: false
+      - key: WEB_PUSH_TTL_SECONDS
+        value: 86400
 
 databases:
   - name: edumag-db

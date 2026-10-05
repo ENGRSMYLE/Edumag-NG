@@ -144,7 +144,7 @@ export function PushNotificationSettings() {
       }
       const value = nextSubscription.toJSON();
       if (!value.endpoint || !value.keys?.p256dh || !value.keys.auth) throw new Error('The browser returned an incomplete push subscription.');
-      await notificationsApi.subscribePush({ endpoint: value.endpoint, keys: { p256dh: value.keys.p256dh, auth: value.keys.auth }, device_name: navigator.userAgent.slice(0, 255) });
+      await notificationsApi.subscribePush({ endpoint: value.endpoint, keys: { p256dh: value.keys.p256dh, auth: value.keys.auth }, device_name: navigator.userAgent.slice(0, 255), expiration_time: value.expirationTime });
       setSubscription(nextSubscription);
       await refetchStatus();
       toast.success('Notifications enabled on this device');

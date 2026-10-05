@@ -50,6 +50,16 @@ test('malformed push data uses privacy-safe fallback content', async () => {
   assert.equal(worker.shown[0].options.data.path, '/dashboard');
 });
 
+test('separate notifications use separate tags so offline backlog is not collapsed', async () => {
+  const worker = loadWorker();
+  for (const notification_id of ['first-id', 'second-id']) {
+    await dispatch(worker.listeners.get('push'), {
+      data: { json: () => ({ notification_id, event_type: 'message_received' }) },
+    });
+  }
+  assert.notEqual(worker.shown[0].options.tag, worker.shown[1].options.tag);
+});
+
 test('external and protocol-relative notification URLs are rejected', async () => {
   for (const url of ['https://evil.example/phish', '//evil.example/phish', '/not-allowed']) {
     const worker = loadWorker();

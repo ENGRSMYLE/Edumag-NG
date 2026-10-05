@@ -113,6 +113,7 @@ async def subscribe_push(
         auth_key=body.keys.auth,
         user_agent=request.headers.get("user-agent"),
         device_name=body.device_name,
+        expiration_time=body.expiration_time,
     )
     subscribed, device_count = await get_push_subscription_status(
         db, user_id=user.id, school_id=user.current_school_id  # type: ignore[attr-defined]
@@ -186,15 +187,14 @@ async def test_push(
             detail="Test notification could not be queued",
         )
 
-    # A test action should report actual delivery, not merely confirm that an
-    # outbox row exists. Lease this row before committing so a worker cannot
-    # race the request and send the same test twice.
+    # A test action should report push-service acceptance, not merely confirm
+    # that an outbox row exists. Web Push has no device-display receipt.
     outbox.status = OutboxStatus.processing
     outbox.locked_at = datetime.now(timezone.utc)
     outbox.attempt_count += 1
     await db.commit()
     delivery_status = await process_outbox_record(db, str(outbox.id))
-    if delivery_status != OutboxStatus.delivered:
+    if delivery_status != OutboxStatus.accepted:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="The push provider did not accept the test notification. Check the worker/API VAPID keys and try enabling this device again.",

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -43,9 +44,14 @@ async def upsert_push_subscription(
     auth_key: str,
     user_agent: str | None = None,
     device_name: str | None = None,
+    expiration_time: int | None = None,
     commit: bool = True,
 ) -> PushSubscription:
     await _require_active_membership(db, user_id=user_id, school_id=school_id)
+    expires_at = (
+        datetime.fromtimestamp(expiration_time / 1000, tz=timezone.utc)
+        if expiration_time is not None else None
+    )
     existing = (await db.execute(
         select(PushSubscription)
         .where(PushSubscription.endpoint == endpoint)
@@ -61,7 +67,8 @@ async def upsert_push_subscription(
         existing.auth_key = auth_key
         existing.user_agent = user_agent
         existing.device_name = device_name
-        existing.is_active = True
+        existing.expires_at = expires_at
+        existing.is_active = expires_at is None or expires_at > datetime.now(timezone.utc)
         existing.failure_count = 0
         subscription = existing
     else:
@@ -73,6 +80,8 @@ async def upsert_push_subscription(
             auth_key=auth_key,
             user_agent=user_agent,
             device_name=device_name,
+            expires_at=expires_at,
+            is_active=expires_at is None or expires_at > datetime.now(timezone.utc),
         )
         db.add(subscription)
 

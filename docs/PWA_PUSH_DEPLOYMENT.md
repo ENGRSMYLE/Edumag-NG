@@ -12,6 +12,9 @@
 - Set `WEB_PUSH_VAPID_PUBLIC_KEY` from the generated public key.
 - Set `WEB_PUSH_VAPID_PRIVATE_KEY` as a secret available only to backend and worker services.
 - Set `WEB_PUSH_SUBJECT` to a monitored `mailto:` address or HTTPS contact URL.
+- Set `WEB_PUSH_TTL_SECONDS=86400` (24 hours), or choose a retention period
+  appropriate for your notification policy. This is push-service retention,
+  not a guarantee of device display.
 - Confirm `/health` succeeds after deployment.
 - Never expose the private key through health, settings, or notification APIs.
 - Deploy the `edumag-notification-worker` background worker with the command
@@ -45,7 +48,7 @@ Recommended rollout:
 1. Internal test school and staff test accounts.
 2. Selected parent accounts that explicitly opt in.
 3. Review `/api/notifications/operations` for backlog, failures, expired
-   subscriptions, delivery success, and worker latency.
+   subscriptions, push-service acceptance, and worker latency.
 4. Enable one pilot school, monitor it, then expand school by school.
 
 Turning the school flag off stops new subscriptions and new push outbox
