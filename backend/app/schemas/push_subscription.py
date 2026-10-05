@@ -49,3 +49,4 @@ class PushSubscriptionStatus(BaseModel):
 class PushTestResponse(BaseModel):
     message: str
     notification_id: str
+    delivery_status: str

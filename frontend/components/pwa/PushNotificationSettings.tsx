@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
 import { AlertTriangle, BellOff, BellRing, CheckCircle2, Loader2, ShieldCheck, Smartphone, WifiOff, type LucideIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { notificationsApi } from '@/lib/api';
@@ -27,6 +28,9 @@ function supportsPush() {
 }
 
 function messageFrom(error: unknown) {
+  if (axios.isAxiosError(error) && typeof error.response?.data?.detail === 'string') {
+    return error.response.data.detail;
+  }
   if (error instanceof Error) return error.message;
   return 'Push notifications could not be updated. Please try again.';
 }
@@ -178,8 +182,8 @@ export function PushNotificationSettings() {
     setAction('test');
     setActionError(null);
     try {
-      await notificationsApi.testPush();
-      toast.success('Test notification queued. It should arrive shortly.');
+      const response = await notificationsApi.testPush();
+      toast.success(response.data.message);
     } catch (error) {
       setActionError(messageFrom(error));
     } finally {

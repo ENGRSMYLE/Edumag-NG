@@ -2,7 +2,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import settings
-from app.models.notification import Notification, NotificationOutbox
+from app.models.notification import Notification, NotificationOutbox, OutboxStatus
 from app.models.push_subscription import PushSubscription
 from app.models.school_membership import SchoolMembership
 from app.utils.security import create_access_token
@@ -221,6 +221,9 @@ async def test_oversized_subscription_fields_are_rejected(client, test_engine, m
 async def test_push_test_queues_only_the_current_users_notification(client, test_engine, monkeypatch) -> None:
     monkeypatch.setattr(settings, "WEB_PUSH_VAPID_PUBLIC_KEY", "configured")
     monkeypatch.setattr(settings, "WEB_PUSH_VAPID_PRIVATE_KEY", "configured")
+    async def delivered(*args, **kwargs):
+        return OutboxStatus.delivered
+    monkeypatch.setattr("app.routers.notifications.process_outbox_record", delivered)
     factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as db:
         context, membership, _ = await _seed_api_users(db)
@@ -233,7 +236,8 @@ async def test_push_test_queues_only_the_current_users_notification(client, test
     )
     response = await client.post("/api/notifications/push/test", headers=headers)
     assert response.status_code == 200
-    assert response.json()["message"] == "Test notification queued"
+    assert response.json()["message"] == "Test notification sent"
+    assert response.json()["delivery_status"] == "delivered"
 
     async with factory() as db:
         notifications = list((await db.execute(select(Notification))).scalars().all())

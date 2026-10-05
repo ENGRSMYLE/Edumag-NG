@@ -15,7 +15,7 @@ export interface PushSubscriptionRequest {
   keys: { p256dh: string; auth: string };
   device_name?: string;
 }
-export interface PushTestResponse { message: string; notification_id: string }
+export interface PushTestResponse { message: string; notification_id: string; delivery_status: string }
 export interface NotificationPreference {
   event_type: NotificationEventType;
   in_app_enabled: boolean;

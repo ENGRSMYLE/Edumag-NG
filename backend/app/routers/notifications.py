@@ -7,7 +7,7 @@ from app.database import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.rbac import require_role
 from app.config import settings
-from app.models.notification import DomainEventType, Notification
+from app.models.notification import DomainEventType, Notification, NotificationOutbox, OutboxStatus
 from app.models.school import School
 from app.models.user import User
 from app.schemas.notification import (
@@ -26,7 +26,7 @@ from app.schemas.push_subscription import (
 )
 from app.services.notification_policy import build_push_payload
 from app.services.notifications import emit_notifications
-from app.services.notification_outbox import get_outbox_metrics
+from app.services.notification_outbox import get_outbox_metrics, process_outbox_record
 from app.services.notification_preferences import list_effective_preferences, update_preference
 from app.services.push_subscriptions import (
     get_push_subscription_status,
@@ -173,8 +173,37 @@ async def test_push(
         data={"url": payload.url, "test": True},
         respect_preferences=False,
     )
+    await db.flush()
+    outbox = (await db.execute(
+        select(NotificationOutbox).where(
+            NotificationOutbox.notification_id == notifications[0].id,
+        )
+    )).scalar_one_or_none()
+    if outbox is None:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Test notification could not be queued",
+        )
+
+    # A test action should report actual delivery, not merely confirm that an
+    # outbox row exists. Lease this row before committing so a worker cannot
+    # race the request and send the same test twice.
+    outbox.status = OutboxStatus.processing
+    outbox.locked_at = datetime.now(timezone.utc)
+    outbox.attempt_count += 1
     await db.commit()
-    return PushTestResponse(message="Test notification queued", notification_id=str(notifications[0].id))
+    delivery_status = await process_outbox_record(db, str(outbox.id))
+    if delivery_status != OutboxStatus.delivered:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The push provider did not accept the test notification. Check the worker/API VAPID keys and try enabling this device again.",
+        )
+    return PushTestResponse(
+        message="Test notification sent",
+        notification_id=str(notifications[0].id),
+        delivery_status=delivery_status.value,
+    )
 
 @router.get("", response_model=NotificationPage)
 async def list_notifications(page: int = Query(1, ge=1), per_page: int = Query(20, ge=1, le=100), unread_only: bool = False, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):

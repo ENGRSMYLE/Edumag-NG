@@ -56,6 +56,7 @@ test('logout detaches the current browser push subscription', () => {
 test('subscribed devices can queue an explicit test notification', () => {
   assert.ok(settings.includes('await notificationsApi.testPush()'));
   assert.ok(settings.includes('Send test notification'));
+  assert.ok(settings.includes('toast.success(response.data.message)'));
   assert.ok(api.includes("api.post<PushTestResponse>('/notifications/push/test')"));
 });
 
