@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, func, or_, select
@@ -224,3 +225,38 @@ async def run_outbox_batch(
         async with session_factory() as record_session:
             await process_outbox_record(record_session, outbox_id, channel=channel)
     return len(claimed)
+
+
+async def deliver_notification_ids_now(notification_ids: list[uuid.UUID]) -> int:
+    """Best-effort immediate delivery for freshly committed notifications.
+
+    The durable worker remains the fallback.  Rows are leased with the same
+    state transition used by the worker, so both paths can run concurrently
+    without sending a notification twice.
+    """
+    if not notification_ids:
+        return 0
+
+    current = datetime.now(timezone.utc)
+    async with AsyncSessionLocal() as claim_session:
+        rows = list((await claim_session.execute(
+            select(NotificationOutbox)
+            .where(
+                NotificationOutbox.notification_id.in_(notification_ids),
+                NotificationOutbox.channel == NotificationChannel.push,
+                NotificationOutbox.status == OutboxStatus.pending,
+                NotificationOutbox.available_at <= current,
+            )
+            .with_for_update(skip_locked=True)
+        )).scalars().all())
+        for row in rows:
+            row.status = OutboxStatus.processing
+            row.locked_at = current
+            row.attempt_count += 1
+        await claim_session.commit()
+        outbox_ids = [str(row.id) for row in rows]
+
+    for outbox_id in outbox_ids:
+        async with AsyncSessionLocal() as record_session:
+            await process_outbox_record(record_session, outbox_id)
+    return len(outbox_ids)

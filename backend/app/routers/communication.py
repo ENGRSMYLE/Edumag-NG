@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,6 +20,7 @@ from app.models.communication import Announcement, Message, MessageRecipient, Ta
 from app.models.school_membership import MembershipRole, SchoolMembership
 from app.models.user import User
 from app.services.notifications import notify_announcement_published, notify_message_received
+from app.services.notification_outbox import deliver_notification_ids_now
 from app.schemas.communication import (
     AnnouncementCreate,
     AnnouncementResponse,
@@ -94,6 +95,7 @@ _MSG_OPTIONS = [
 @router.post("/announcements", response_model=AnnouncementResponse, status_code=status.HTTP_201_CREATED)
 async def create_announcement(
     body: AnnouncementCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_permission("send_announcements")),
     db: AsyncSession = Depends(get_db),
 ) -> AnnouncementResponse:
@@ -108,7 +110,7 @@ async def create_announcement(
     )
     db.add(ann)
     await db.flush()
-    await notify_announcement_published(
+    notifications = await notify_announcement_published(
         db,
         school_id=school_id,
         audience=body.target_audience,
@@ -125,6 +127,10 @@ async def create_announcement(
     )
     ann = result.scalar_one()
     await db.commit()
+    background_tasks.add_task(
+        deliver_notification_ids_now,
+        [notification.id for notification in notifications],
+    )
     return _announcement_response(ann)
 
 
@@ -235,6 +241,7 @@ async def list_recipients(
 @router.post("/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 async def send_message(
     body: SendMessageRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
@@ -298,7 +305,7 @@ async def send_message(
     await db.flush()
     db.add_all([MessageRecipient(message_id=msg.id, user_id=user_id) for user_id in requested_ids])
     await db.flush()
-    await notify_message_received(
+    notifications = await notify_message_received(
         db,
         school_id=school_id,
         recipient_ids=requested_ids,
@@ -317,6 +324,10 @@ async def send_message(
     )
     msg = result.scalar_one()
     await db.commit()
+    background_tasks.add_task(
+        deliver_notification_ids_now,
+        [notification.id for notification in notifications],
+    )
     return _message_response(msg, current_user.id)
 
 
