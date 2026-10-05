@@ -1,4 +1,5 @@
 import base64
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -51,3 +52,9 @@ def test_backend_rejects_partial_or_malformed_vapid_configuration() -> None:
         _settings(WEB_PUSH_VAPID_PUBLIC_KEY=public_key)
     with pytest.raises(ValidationError):
         _settings(WEB_PUSH_VAPID_PUBLIC_KEY="not-a-key", WEB_PUSH_VAPID_PRIVATE_KEY="not-a-key")
+
+
+def test_render_worker_uses_package_safe_module_execution() -> None:
+    blueprint = (Path(__file__).parents[1] / "render.yaml").read_text(encoding="utf-8")
+    assert "dockerCommand: python -m scripts.run_notification_worker" in blueprint
+    assert "dockerCommand: python scripts/run_notification_worker.py" not in blueprint

@@ -14,6 +14,12 @@
 - Set `WEB_PUSH_SUBJECT` to a monitored `mailto:` address or HTTPS contact URL.
 - Confirm `/health` succeeds after deployment.
 - Never expose the private key through health, settings, or notification APIs.
+- Deploy the `edumag-notification-worker` background worker with the command
+  `python -m scripts.run_notification_worker`. Running the file path directly
+  can prevent the worker from importing the top-level `app` package.
+- Confirm the worker logs contain `worker_started` and periodic
+  `worker_metrics` events. A growing `pending_outbox_count` means the worker is
+  not processing the queue.
 
 ## Frontend deployment
 

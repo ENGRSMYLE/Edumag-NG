@@ -48,7 +48,9 @@ services:
     name: edumag-notification-worker
     runtime: docker
     dockerfilePath: ./Dockerfile
-    dockerCommand: python scripts/run_notification_worker.py
+    # Module execution keeps /app on sys.path so imports such as
+    # `from app.database import ...` work inside the container.
+    dockerCommand: python -m scripts.run_notification_worker
     plan: 0.5c-512mb
     numInstances: 1
     maxShutdownDelaySeconds: 30
