@@ -62,6 +62,7 @@ export function StudentEditForm({ dashboardRole }: { dashboardRole: 'admin' | 's
   const queryClient = useQueryClient();
   const basePath = `/dashboard/${dashboardRole}/students`;
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [classError, setClassError] = useState(false);
 
   const studentQuery = useQuery({
     queryKey: ['student', id],
@@ -70,7 +71,7 @@ export function StudentEditForm({ dashboardRole }: { dashboardRole: 'admin' | 's
   });
   const classesQuery = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.list().then((response) => response.data.items),
+    queryFn: () => classesApi.list({ is_active: true, per_page: 100 }).then((response) => response.data.items),
     staleTime: 120_000,
   });
 
@@ -109,6 +110,12 @@ export function StudentEditForm({ dashboardRole }: { dashboardRole: 'admin' | 's
   const set = (field: keyof FormState, value: string) => setForm((current) => ({ ...current, [field]: value }));
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (!form.class_id) {
+      setClassError(true);
+      toast.error('Class is required');
+      return;
+    }
+    setClassError(false);
     if (!form.first_name.trim() || !form.last_name.trim() || !form.admission_number.trim() || !form.date_of_birth || !form.admission_date) {
       toast.error('Please fill in all required fields');
       return;
@@ -119,7 +126,7 @@ export function StudentEditForm({ dashboardRole }: { dashboardRole: 'admin' | 's
       middle_name: form.middle_name.trim() || null, address: form.address.trim() || null,
       state_of_origin: form.state_of_origin || null, religion: form.religion.trim() || null,
       blood_group: form.blood_group || null, genotype: form.genotype || null,
-      class_id: form.class_id || null, photo_url: form.photo_url || null,
+      class_id: form.class_id, photo_url: form.photo_url || null,
     });
   };
 
@@ -148,7 +155,7 @@ export function StudentEditForm({ dashboardRole }: { dashboardRole: 'admin' | 's
         <FormSection title="Academic Information">
           <Field label="Admission Number" required><input className={inputCls} value={form.admission_number} onChange={(e) => set('admission_number', e.target.value)} required /></Field>
           <Field label="Admission Date" required><input type="date" className={inputCls} value={form.admission_date} onChange={(e) => set('admission_date', e.target.value)} required /></Field>
-          <Field label="Class"><select className={inputCls} value={form.class_id} onChange={(e) => set('class_id', e.target.value)}><option value="">No class assigned</option>{(classesQuery.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+          <Field label="Class" required><select className={inputCls} value={form.class_id} onChange={(e) => { set('class_id', e.target.value); setClassError(false); }} required><option value="">Select a class</option>{(classesQuery.data ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{classError && <span className="text-[11px] font-normal text-red-500">Class is required</span>}</Field>
         </FormSection>
         <FormSection title="Medical, Origin & Contact">
           <Field label="Blood Group"><select className={inputCls} value={form.blood_group} onChange={(e) => set('blood_group', e.target.value)}><option value="">Not provided</option>{BLOOD_GROUPS.map((item) => <option key={item}>{item}</option>)}</select></Field>

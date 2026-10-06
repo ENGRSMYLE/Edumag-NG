@@ -51,7 +51,7 @@ export interface CreateStudentRequest {
   religion?: string;
   blood_group?: string;
   genotype?: string;
-  class_id?: string;
+  class_id: string;
   photo_url?: string;
   admission_date: string;
 }
@@ -65,7 +65,7 @@ export type UpdateStudentRequest = Partial<
   religion?: string | null;
   blood_group?: string | null;
   genotype?: string | null;
-  class_id?: string | null;
+  class_id?: string;
   photo_url?: string | null;
 };
 

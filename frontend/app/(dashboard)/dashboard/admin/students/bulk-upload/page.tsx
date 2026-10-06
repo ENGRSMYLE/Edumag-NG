@@ -23,7 +23,7 @@ import type { BulkUploadResult } from '@/types/student';
 
 type Step = 1 | 2 | 3 | 4;
 
-const REQUIRED_COLS = ['first_name', 'last_name', 'date_of_birth', 'gender', 'admission_date'];
+const REQUIRED_COLS = ['first_name', 'last_name', 'date_of_birth', 'gender', 'admission_date', 'class_name'];
 const ALL_COLS = [
   'admission_number', 'first_name', 'last_name', 'middle_name',
   'date_of_birth', 'gender', 'class_name', 'state_of_origin',

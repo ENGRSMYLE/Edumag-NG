@@ -56,7 +56,7 @@ export default function NewStudentPage() {
 
   const { data: classes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.list().then((r) => r.data.items),
+    queryFn: () => classesApi.list({ is_active: true, per_page: 100 }).then((r) => r.data.items),
     staleTime: 120_000,
   });
 
@@ -90,7 +90,7 @@ export default function NewStudentPage() {
         religion: form.religion || undefined,
         blood_group: form.blood_group || undefined,
         genotype: form.genotype || undefined,
-        class_id: form.class_id || undefined,
+        class_id: form.class_id,
       };
       return studentsApi.create(payload);
     },
@@ -110,6 +110,10 @@ export default function NewStudentPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.class_id) {
+      toast.error('Class is required');
+      return;
+    }
     if (!form.admission_number || !form.first_name || !form.last_name || !form.date_of_birth || !form.admission_date) {
       toast.error('Please fill in all required fields');
       return;
@@ -218,13 +222,14 @@ export default function NewStudentPage() {
                   required
                 />
               </Field>
-              <Field label="Class">
+              <Field label="Class" required>
                 <select
                   className={selectCls}
                   value={form.class_id}
                   onChange={(e) => set('class_id', e.target.value)}
+                  required
                 >
-                  <option value="">Select class (optional)</option>
+                  <option value="">Select a class</option>
                   {(classes ?? []).map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}

@@ -44,11 +44,31 @@ async def _register_school(client: AsyncClient, **kwargs) -> dict:
     payload = _school_payload(**kwargs)
     resp = await client.post("/api/auth/register-school", json=payload)
     assert resp.status_code == 201, f"School registration failed: {resp.text}"
-    return resp.json()
+    school = resp.json()
+    class_resp = await client.post(
+        "/api/classes/",
+        json={
+            "name": "JSS 1A",
+            "level": "JSS 1",
+            "arm": "A",
+            "academic_session": "2024/2025",
+            "term": "first",
+        },
+        headers=_auth(school["access_token"]),
+    )
+    assert class_resp.status_code == 201, class_resp.text
+    school["default_class_id"] = class_resp.json()["id"]
+    return school
 
 
 def _auth(token: str) -> dict:
-    return {"Authorization": f"Bearer {token}"}
+    # The application intentionally prioritizes its httpOnly access-token
+    # cookie over the Authorization header. Set both so multi-school tests do
+    # not accidentally retain the most recently registered school's cookie.
+    return {
+        "Authorization": f"Bearer {token}",
+        "Cookie": f"access_token={token}",
+    }
 
 
 _STUDENT_BASE = {
@@ -58,6 +78,10 @@ _STUDENT_BASE = {
     "gender": "male",
     "admission_date": "2023-09-01",
 }
+
+
+def _student_payload(school: dict, **overrides) -> dict:
+    return {**_STUDENT_BASE, "class_id": school["default_class_id"], **overrides}
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +94,7 @@ async def test_create_student_success(client: AsyncClient) -> None:
 
     resp = await client.post(
         "/api/students/",
-        json={**_STUDENT_BASE, "admission_number": "SCH-2025-0001"},
+        json=_student_payload(school, admission_number="SCH-2025-0001"),
         headers=_auth(token),
     )
     assert resp.status_code == 201, resp.text
@@ -83,7 +107,42 @@ async def test_create_student_success(client: AsyncClient) -> None:
     assert body["gender"] == "male"
     assert body["is_active"] is True
     assert body["parent_count"] == 0
-    assert body["class_name"] is None
+    assert body["class_name"] == "JSS 1A"
+
+
+async def test_create_student_requires_valid_school_class(client: AsyncClient) -> None:
+    school_a = await _register_school(
+        client, name="Class Validation A", email="class-validation-a@school.ng"
+    )
+    school_b = await _register_school(
+        client, name="Class Validation B", email="class-validation-b@school.ng"
+    )
+
+    missing = await client.post(
+        "/api/students/", json=_STUDENT_BASE, headers=_auth(school_a["access_token"])
+    )
+    assert missing.status_code == 422
+
+    null_class = await client.post(
+        "/api/students/",
+        json={**_STUDENT_BASE, "class_id": None},
+        headers=_auth(school_a["access_token"]),
+    )
+    assert null_class.status_code == 422
+
+    invalid = await client.post(
+        "/api/students/",
+        json={**_STUDENT_BASE, "class_id": "00000000-0000-0000-0000-000000000000"},
+        headers=_auth(school_a["access_token"]),
+    )
+    assert invalid.status_code == 422
+
+    cross_school = await client.post(
+        "/api/students/",
+        json={**_STUDENT_BASE, "class_id": school_b["default_class_id"]},
+        headers=_auth(school_a["access_token"]),
+    )
+    assert cross_school.status_code == 422
 
 
 # ---------------------------------------------------------------------------
@@ -99,10 +158,7 @@ async def test_create_student_auto_admission_number(client: AsyncClient) -> None
     for i in range(3):
         resp = await client.post(
             "/api/students/",
-            json={
-                **_STUDENT_BASE,
-                "last_name": f"Student{i}",
-            },
+            json=_student_payload(school, last_name=f"Student{i}"),
             headers=_auth(token),
         )
         assert resp.status_code == 201, resp.text
@@ -139,7 +195,7 @@ async def test_generate_admission_number_is_sequential_and_school_scoped(
 
     create_response = await client.post(
         "/api/students/",
-        json={**_STUDENT_BASE, "admission_number": first_number},
+        json=_student_payload(school_a, admission_number=first_number),
         headers=_auth(school_a["access_token"]),
     )
     assert create_response.status_code == 201, create_response.text
@@ -177,7 +233,7 @@ async def test_get_students_school_isolation(client: AsyncClient) -> None:
     # Create a student in School A
     resp = await client.post(
         "/api/students/",
-        json={**_STUDENT_BASE, "admission_number": "A-001"},
+        json=_student_payload(school_a, admission_number="A-001"),
         headers=_auth(token_a),
     )
     assert resp.status_code == 201
@@ -186,7 +242,7 @@ async def test_get_students_school_isolation(client: AsyncClient) -> None:
     # Create a student in School B
     resp = await client.post(
         "/api/students/",
-        json={**_STUDENT_BASE, "admission_number": "B-001"},
+        json=_student_payload(school_b, admission_number="B-001"),
         headers=_auth(token_b),
     )
     assert resp.status_code == 201
@@ -212,11 +268,25 @@ async def test_update_student_persists_and_is_school_scoped(client: AsyncClient)
     )
     create = await client.post(
         "/api/students/",
-        json={**_STUDENT_BASE, "admission_number": "UPDATE-001"},
+        json=_student_payload(school_a, admission_number="UPDATE-001"),
         headers=_auth(school_a["access_token"]),
     )
     assert create.status_code == 201, create.text
     student_id = create.json()["id"]
+
+    second_class = await client.post(
+        "/api/classes/",
+        json={
+            "name": "JSS 2A",
+            "level": "JSS 2",
+            "arm": "A",
+            "academic_session": "2024/2025",
+            "term": "first",
+        },
+        headers=_auth(school_a["access_token"]),
+    )
+    assert second_class.status_code == 201, second_class.text
+    second_class_id = second_class.json()["id"]
 
     update = await client.patch(
         f"/api/students/{student_id}",
@@ -226,6 +296,15 @@ async def test_update_student_persists_and_is_school_scoped(client: AsyncClient)
     assert update.status_code == 200, update.text
     assert update.json()["first_name"] == "Chidi"
     assert update.json()["address"] == "42 Updated Road"
+    assert update.json()["class_id"] == school_a["default_class_id"]
+
+    class_change = await client.patch(
+        f"/api/students/{student_id}",
+        json={"class_id": second_class_id},
+        headers=_auth(school_a["access_token"]),
+    )
+    assert class_change.status_code == 200, class_change.text
+    assert class_change.json()["class_id"] == second_class_id
 
     refreshed = await client.get(
         f"/api/students/{student_id}", headers=_auth(school_a["access_token"])
@@ -233,6 +312,27 @@ async def test_update_student_persists_and_is_school_scoped(client: AsyncClient)
     assert refreshed.status_code == 200
     assert refreshed.json()["first_name"] == "Chidi"
     assert refreshed.json()["address"] == "42 Updated Road"
+    assert refreshed.json()["class_id"] == second_class_id
+
+    grouped = await client.get(
+        "/api/students/",
+        params={"class_id": second_class_id},
+        headers=_auth(school_a["access_token"]),
+    )
+    assert grouped.status_code == 200
+    assert [item["id"] for item in grouped.json()["items"]] == [student_id]
+
+    for forbidden_class in (
+        None,
+        "00000000-0000-0000-0000-000000000000",
+        school_b["default_class_id"],
+    ):
+        rejected = await client.patch(
+            f"/api/students/{student_id}",
+            json={"class_id": forbidden_class},
+            headers=_auth(school_a["access_token"]),
+        )
+        assert rejected.status_code == 422, rejected.text
 
     inaccessible = await client.patch(
         f"/api/students/{student_id}",
@@ -265,15 +365,11 @@ async def test_teacher_only_sees_own_class_students(client: AsyncClient) -> None
     school = await _register_school(client)
     token = school["access_token"]
 
-    # Create a class via users router (super_admin creates class is not done yet,
-    # so we create students without a class and then test the endpoint returns empty)
-    # This test verifies the scoping logic without a full class setup
-
-    # Create 2 students (no class assigned yet)
+    # Create 2 students in the school's default class.
     for name in ("Alice", "Bob"):
         resp = await client.post(
             "/api/students/",
-            json={**_STUDENT_BASE, "last_name": name},
+            json=_student_payload(school, last_name=name),
             headers=_auth(token),
         )
         assert resp.status_code == 201
@@ -281,7 +377,12 @@ async def test_teacher_only_sees_own_class_students(client: AsyncClient) -> None
     # Invite a teacher (who has no class assigned)
     invite_resp = await client.post(
         "/api/users/invite",
-        json={"name": "Mr Teacher", "email": "teacher@school.ng", "role": "teacher"},
+        json={
+            "name": "Mr Teacher",
+            "email": "teacher@school.ng",
+            "role": "teacher",
+            "class_id": school["default_class_id"],
+        },
         headers=_auth(token),
     )
     assert invite_resp.status_code == 201
@@ -295,14 +396,14 @@ async def test_teacher_only_sees_own_class_students(client: AsyncClient) -> None
     assert set_pw_resp.status_code == 200
     teacher_token = set_pw_resp.json()["access_token"]
 
-    # Teacher with no class should get empty list
+    # Teacher sees the students grouped into their assigned class.
     my_class_resp = await client.get(
         "/api/students/my-class",
         headers=_auth(teacher_token),
     )
     assert my_class_resp.status_code == 200
-    assert my_class_resp.json()["total"] == 0
-    assert my_class_resp.json()["items"] == []
+    assert my_class_resp.json()["total"] == 2
+    assert len(my_class_resp.json()["items"]) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -315,11 +416,11 @@ async def test_bulk_upload_partial_success(client: AsyncClient) -> None:
     token = school["access_token"]
 
     rows = [
-        {"first_name": "Tunde", "last_name": "Adeyemi", "date_of_birth": "2012-01-10", "gender": "male", "admission_date": "2023-09-01", "state_of_origin": "Lagos"},
-        {"first_name": "Ngozi", "last_name": "Eze", "middle_name": "Chisom", "date_of_birth": "2013-05-20", "gender": "female", "admission_number": "BULK-002", "admission_date": "2023-09-01", "state_of_origin": "Anambra"},
-        {"first_name": "Musa", "last_name": "Ibrahim", "date_of_birth": "2011-11-30", "gender": "male", "admission_date": "2023-09-01", "address": "Kano Road", "state_of_origin": "Kano"},
-        {"first_name": "", "last_name": "NoName", "date_of_birth": "2012-01-01", "gender": "male", "admission_date": "2023-09-01"},
-        {"first_name": "Valid", "last_name": "Name", "date_of_birth": "2012-01-01", "gender": "unknown_gender", "admission_date": "2023-09-01"},
+        {"first_name": "Tunde", "last_name": "Adeyemi", "date_of_birth": "2012-01-10", "gender": "male", "admission_date": "2023-09-01", "state_of_origin": "Lagos", "class_name": "JSS 1A"},
+        {"first_name": "Ngozi", "last_name": "Eze", "middle_name": "Chisom", "date_of_birth": "2013-05-20", "gender": "female", "admission_number": "BULK-002", "admission_date": "2023-09-01", "state_of_origin": "Anambra", "class_name": "JSS 1A"},
+        {"first_name": "Musa", "last_name": "Ibrahim", "date_of_birth": "2011-11-30", "gender": "male", "admission_date": "2023-09-01", "address": "Kano Road", "state_of_origin": "Kano", "class_name": "JSS 1A"},
+        {"first_name": "", "last_name": "NoName", "date_of_birth": "2012-01-01", "gender": "male", "admission_date": "2023-09-01", "class_name": "JSS 1A"},
+        {"first_name": "Valid", "last_name": "Name", "date_of_birth": "2012-01-01", "gender": "unknown_gender", "admission_date": "2023-09-01", "class_name": "JSS 1A"},
     ]
 
     resp = await client.post(
@@ -339,6 +440,28 @@ async def test_bulk_upload_partial_success(client: AsyncClient) -> None:
     assert error_row_numbers == {5, 6}
 
 
+async def test_bulk_upload_requires_valid_class(client: AsyncClient) -> None:
+    school = await _register_school(client)
+    response = await client.post(
+        "/api/students/bulk-upload",
+        json={
+            "rows": [
+                {**_STUDENT_BASE},
+                {**_STUDENT_BASE, "last_name": "WrongClass", "class_name": "Unknown Class"},
+                {**_STUDENT_BASE, "last_name": "ValidClass", "class_name": "JSS 1A"},
+            ]
+        },
+        headers=_auth(school["access_token"]),
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["success_count"] == 1
+    assert [row["reason"] for row in result["error_rows"]] == [
+        "Class is required",
+        "Class 'Unknown Class' not found in this school",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # test_promote_students
 # ---------------------------------------------------------------------------
@@ -353,7 +476,7 @@ async def test_promote_students(client: AsyncClient) -> None:
     for name in ("Ade", "Bola"):
         resp = await client.post(
             "/api/students/",
-            json={**_STUDENT_BASE, "last_name": name},
+            json=_student_payload(school, last_name=name),
             headers=_auth(token),
         )
         assert resp.status_code == 201
@@ -370,11 +493,11 @@ async def test_promote_students(client: AsyncClient) -> None:
     assert body["updated_count"] == 2
     assert body["action"] == "repeat"
 
-    # Confirm students have no class (repeat clears class_id)
+    # Repeating retains the current class assignment.
     for sid in student_ids:
         detail_resp = await client.get(f"/api/students/{sid}", headers=_auth(token))
         assert detail_resp.status_code == 200
-        assert detail_resp.json()["class_id"] is None
+        assert detail_resp.json()["class_id"] == school["default_class_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -396,7 +519,7 @@ async def test_transfer_student(client: AsyncClient) -> None:
     # Create a student
     resp = await client.post(
         "/api/students/",
-        json={**_STUDENT_BASE},
+        json=_student_payload(school),
         headers=_auth(token),
     )
     assert resp.status_code == 201
@@ -441,7 +564,7 @@ async def test_deactivate_student(client: AsyncClient) -> None:
 
     resp = await client.post(
         "/api/students/",
-        json={**_STUDENT_BASE},
+        json=_student_payload(school),
         headers=_auth(token),
     )
     assert resp.status_code == 201
@@ -463,7 +586,7 @@ async def test_duplicate_admission_number_rejected(client: AsyncClient) -> None:
     school = await _register_school(client)
     token = school["access_token"]
 
-    payload = {**_STUDENT_BASE, "admission_number": "DUP-001"}
+    payload = _student_payload(school, admission_number="DUP-001")
 
     resp1 = await client.post("/api/students/", json=payload, headers=_auth(token))
     assert resp1.status_code == 201
@@ -479,7 +602,7 @@ async def test_student_search_supports_full_name_and_admission_number(
     token = school["access_token"]
     create = await client.post(
         "/api/students/",
-        json={**_STUDENT_BASE, "admission_number": "SEARCH-2042"},
+        json=_student_payload(school, admission_number="SEARCH-2042"),
         headers=_auth(token),
     )
     assert create.status_code == 201, create.text

@@ -156,13 +156,12 @@ def validate_bulk_row(
     if adm_date is None:
         return None, f"Invalid Admission Date: '{adm_date_raw}' (use YYYY-MM-DD)"
 
-    # Optional class lookup
     class_name_raw = _cell(row_data, "class_name")
-    class_id: uuid.UUID | None = None
-    if class_name_raw:
-        class_id = classes_map.get(class_name_raw.lower())
-        if class_id is None:
-            return None, f"Class '{class_name_raw}' not found in this school"
+    if not class_name_raw:
+        return None, "Class is required"
+    class_id = classes_map.get(class_name_raw.lower())
+    if class_id is None:
+        return None, f"Class '{class_name_raw}' not found in this school"
 
     admission_number = _cell(row_data, "admission_number") or None
 
@@ -203,7 +202,10 @@ async def process_bulk_upload(
     # Pre-load all classes for this school once
     from app.models.class_ import Class
     cls_result = await db.execute(
-        select(Class.id, Class.name).where(Class.school_id == school_id)
+        select(Class.id, Class.name).where(
+            Class.school_id == school_id,
+            Class.is_active.is_(True),
+        )
     )
     classes_map: dict[str, uuid.UUID] = {
         name.lower(): cid for cid, name in cls_result.all()

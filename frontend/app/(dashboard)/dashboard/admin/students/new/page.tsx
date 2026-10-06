@@ -38,7 +38,7 @@ const schema = z.object({
   photo_url: z.string().optional(),
   admission_number: z.string().min(1, 'Admission number is required'),
   admission_date: z.string().min(1, 'Admission date is required'),
-  class_id: z.string().optional(),
+  class_id: z.string().min(1, 'Class is required'),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -84,7 +84,7 @@ export default function AdminNewStudentPage() {
 
   const { data: classes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.list().then((r) => r.data.items),
+    queryFn: () => classesApi.list({ is_active: true, per_page: 100 }).then((r) => r.data.items),
     staleTime: 120_000,
   });
 
@@ -113,7 +113,7 @@ export default function AdminNewStudentPage() {
         religion: data.religion || undefined,
         blood_group: data.blood_group || undefined,
         genotype: data.genotype || undefined,
-        class_id: data.class_id || undefined,
+        class_id: data.class_id,
         photo_url: data.photo_url || undefined,
       });
     },
@@ -309,9 +309,9 @@ export default function AdminNewStudentPage() {
                   className={inputCls(!!errors.admission_date)}
                 />
               </Field>
-              <Field label="Class" error={errors.class_id?.message}>
-                <select {...register('class_id')} className={selectCls(!!errors.class_id)}>
-                  <option value="">Select class (optional)</option>
+              <Field label="Class" required error={errors.class_id?.message}>
+                <select {...register('class_id')} className={selectCls(!!errors.class_id)} required>
+                  <option value="">Select a class</option>
                   {(classes ?? []).map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}

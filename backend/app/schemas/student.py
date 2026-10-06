@@ -3,7 +3,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ActionEnum(str, Enum):
@@ -28,7 +28,7 @@ class StudentCreate(BaseModel):
     genotype: Optional[str] = Field(None, max_length=10)
     admission_number: Optional[str] = Field(None, max_length=50)
     admission_date: date
-    class_id: Optional[uuid.UUID] = None
+    class_id: uuid.UUID
     photo_url: Optional[str] = Field(None, max_length=500)
 
 
@@ -48,6 +48,13 @@ class StudentUpdate(BaseModel):
     class_id: Optional[uuid.UUID] = None
     photo_url: Optional[str] = Field(None, max_length=500)
     is_active: Optional[bool] = None
+
+    @field_validator("class_id")
+    @classmethod
+    def class_cannot_be_cleared(cls, value: uuid.UUID | None) -> uuid.UUID:
+        if value is None:
+            raise ValueError("Class is required")
+        return value
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +129,7 @@ class BulkUploadRow(BaseModel):
     state_of_origin: Optional[str] = None
     admission_number: Optional[str] = None
     admission_date: date
-    class_id: Optional[uuid.UUID] = None
+    class_id: uuid.UUID
     photo_url: Optional[str] = None
 
 

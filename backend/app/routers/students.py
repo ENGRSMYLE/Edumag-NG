@@ -131,6 +131,7 @@ async def _get_student_or_404(
             selectinload(Student.parents),
             selectinload(Student.guardian_links),
         )
+        .execution_options(populate_existing=True)
     )
     student = result.scalar_one_or_none()
     if student is None:
@@ -151,18 +152,18 @@ async def create_student(
     school_id: uuid.UUID = current_user.current_school_id  # type: ignore[attr-defined]
 
     # Validate class belongs to same school
-    if body.class_id is not None:
-        cls_result = await db.execute(
-            select(Class).where(
-                Class.id == body.class_id,
-                Class.school_id == school_id,
-            )
+    cls_result = await db.execute(
+        select(Class).where(
+            Class.id == body.class_id,
+            Class.school_id == school_id,
+            Class.is_active.is_(True),
         )
-        if cls_result.scalar_one_or_none() is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Class not found in this school",
-            )
+    )
+    if cls_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Class not found in this school",
+        )
 
     # Resolve admission number
     if body.admission_number:
@@ -417,11 +418,12 @@ async def update_student(
             select(Class).where(
                 Class.id == body.class_id,
                 Class.school_id == school_id,
+                Class.is_active.is_(True),
             )
         )
         if cls_result.scalar_one_or_none() is None:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Class not found in this school",
             )
 
@@ -493,12 +495,10 @@ async def remove_class(
     current_user: User = Depends(require_permission("remove_student_from_class")),
     db: AsyncSession = Depends(get_db),
 ) -> StudentResponse:
-    school_id: uuid.UUID = current_user.current_school_id  # type: ignore[attr-defined]
-    student = await _get_student_or_404(student_id, school_id, db)
-    student.class_id = None
-    await db.commit()
-    student = await _get_student_or_404(student.id, school_id, db)
-    return _to_response(student)
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="Class is required; transfer the student to another class instead",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -577,7 +577,7 @@ async def promote_students(
         await db.execute(
             update(Student)
             .where(Student.id.in_(body.student_ids), Student.school_id == school_id)
-            .values(class_id=None)
+            .values(class_id=Student.class_id)
         )
 
     await db.commit()
@@ -621,7 +621,7 @@ async def bulk_upload_template(
         "First Name*", "Last Name*", "Middle Name",
         "Date of Birth* (YYYY-MM-DD)", "Gender* (male/female)",
         "Admission Number", "Admission Date* (YYYY-MM-DD)",
-        "Class Name", "Address", "State of Origin",
+        "Class Name*", "Address", "State of Origin",
         "Parent Name", "Parent Email", "Parent Phone",
         "Relationship", "Primary Guardian", "Finance Access", "Messaging Access",
     ]
