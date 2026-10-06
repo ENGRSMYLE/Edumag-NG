@@ -203,6 +203,59 @@ async def test_get_students_school_isolation(client: AsyncClient) -> None:
     assert detail_resp.status_code == 404
 
 
+async def test_update_student_persists_and_is_school_scoped(client: AsyncClient) -> None:
+    school_a = await _register_school(
+        client, name="Update School A", email="update-a@school.ng"
+    )
+    school_b = await _register_school(
+        client, name="Update School B", email="update-b@school.ng"
+    )
+    create = await client.post(
+        "/api/students/",
+        json={**_STUDENT_BASE, "admission_number": "UPDATE-001"},
+        headers=_auth(school_a["access_token"]),
+    )
+    assert create.status_code == 201, create.text
+    student_id = create.json()["id"]
+
+    update = await client.patch(
+        f"/api/students/{student_id}",
+        json={"first_name": "Chidi", "address": "42 Updated Road"},
+        headers=_auth(school_a["access_token"]),
+    )
+    assert update.status_code == 200, update.text
+    assert update.json()["first_name"] == "Chidi"
+    assert update.json()["address"] == "42 Updated Road"
+
+    refreshed = await client.get(
+        f"/api/students/{student_id}", headers=_auth(school_a["access_token"])
+    )
+    assert refreshed.status_code == 200
+    assert refreshed.json()["first_name"] == "Chidi"
+    assert refreshed.json()["address"] == "42 Updated Road"
+
+    inaccessible = await client.patch(
+        f"/api/students/{student_id}",
+        json={"first_name": "CrossTenantChange"},
+        headers=_auth(school_b["access_token"]),
+    )
+    assert inaccessible.status_code == 404
+
+    missing = await client.patch(
+        "/api/students/00000000-0000-0000-0000-000000000000",
+        json={"first_name": "Missing"},
+        headers=_auth(school_a["access_token"]),
+    )
+    assert missing.status_code == 404
+
+    invalid = await client.patch(
+        f"/api/students/{student_id}",
+        json={"first_name": ""},
+        headers=_auth(school_a["access_token"]),
+    )
+    assert invalid.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # test_teacher_only_sees_own_class_students
 # ---------------------------------------------------------------------------

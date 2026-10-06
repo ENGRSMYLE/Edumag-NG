@@ -56,6 +56,19 @@ export interface CreateStudentRequest {
   admission_date: string;
 }
 
+export type UpdateStudentRequest = Partial<
+  Omit<CreateStudentRequest, 'middle_name' | 'address' | 'state_of_origin' | 'religion' | 'blood_group' | 'genotype' | 'class_id' | 'photo_url'>
+> & {
+  middle_name?: string | null;
+  address?: string | null;
+  state_of_origin?: string | null;
+  religion?: string | null;
+  blood_group?: string | null;
+  genotype?: string | null;
+  class_id?: string | null;
+  photo_url?: string | null;
+};
+
 export interface StudentParent {
   id: string;
   student_id: string;

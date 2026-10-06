@@ -16,7 +16,7 @@ import type {
 } from '@/types/auth';
 import type { PaginatedResponse } from '@/types/common';
 import type { InviteUserRequest, StaffListItem, UserListParams } from '@/types/staff';
-import type { BulkUploadResult, StudentListItem, Student } from '@/types/student';
+import type { BulkUploadResult, StudentListItem, Student, UpdateStudentRequest } from '@/types/student';
 import type { ClassListItem, StudentListParams } from '@/types/academic';
 import type {
   DashboardOverview,
@@ -332,7 +332,7 @@ export const studentsApi = {
   create: (data: import('@/types/student').CreateStudentRequest) =>
     api.post<Student>('/students/', data),
 
-  update: (id: string, data: Partial<import('@/types/student').CreateStudentRequest>) =>
+  update: (id: string, data: UpdateStudentRequest) =>
     api.patch<Student>(`/students/${id}`, data),
 
   bulkUpload: (rows: Record<string, unknown>[], dispatchParentInvitations = false) =>

@@ -398,6 +398,20 @@ async def update_student(
     school_id: uuid.UUID = current_user.current_school_id  # type: ignore[attr-defined]
     student = await _get_student_or_404(student_id, school_id, db)
 
+    if body.admission_number is not None and body.admission_number != student.admission_number:
+        duplicate = await db.execute(
+            select(Student.id).where(
+                Student.school_id == school_id,
+                Student.admission_number == body.admission_number,
+                Student.id != student_id,
+            )
+        )
+        if duplicate.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Admission number '{body.admission_number}' already exists in this school",
+            )
+
     if body.class_id is not None:
         cls_result = await db.execute(
             select(Class).where(

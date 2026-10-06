@@ -12,6 +12,7 @@ import {
   FileDown,
   Loader2,
   BookOpen,
+  Edit2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -311,6 +312,15 @@ export default function AdminStudentDetailPage() {
           { label: 'Students', href: '/dashboard/admin/students' },
           { label: fullName },
         ]}
+        actions={
+          <button
+            onClick={() => router.push(`/dashboard/admin/students/${id}/edit`)}
+            className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-2 text-sm font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-border)]"
+          >
+            <Edit2 className="h-4 w-4" strokeWidth={1.5} />
+            Edit
+          </button>
+        }
       />
 
       {/* Avatar card */}
