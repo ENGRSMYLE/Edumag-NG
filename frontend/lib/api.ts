@@ -276,10 +276,14 @@ export const authApi = {
     api.post<VerifyOTPResponse>('/auth/verify-otp', data),
 
   forgotPassword: (email: string) =>
-    api.post<{ message: string }>('/auth/forgot-password', { email }),
+    api.post<{ message: string }>('/auth/forgot-password', { email }, { timeout: 15_000 }),
 
   resetPassword: (token: string, newPassword: string) =>
-    api.post<{ message: string }>('/auth/reset-password', { token, new_password: newPassword }),
+    api.post<{ message: string }>(
+      '/auth/reset-password',
+      { token, new_password: newPassword },
+      { timeout: 15_000 },
+    ),
 };
 
 // ---------------------------------------------------------------------------

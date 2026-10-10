@@ -1,4 +1,5 @@
 import asyncio
+from html import escape
 import logging
 
 import resend
@@ -165,11 +166,13 @@ async def send_school_linked_email(
 
 
 async def send_password_reset_email(to_email: str, to_name: str, reset_link: str) -> None:
+    safe_name = escape(to_name)
+    safe_reset_link = escape(reset_link, quote=True)
     body_html = f"""
-      <p>Hello <strong>{to_name}</strong>,</p>
+      <p>Hello <strong>{safe_name}</strong>,</p>
       <p>We received a request to reset your EduMag NG password.</p>
       <p style="text-align:center;margin:32px 0;">
-        <a href="{reset_link}"
+        <a href="{safe_reset_link}"
            style="background:{_BRAND_COLOR};color:#ffffff;text-decoration:none;
                   padding:14px 32px;border-radius:6px;font-size:15px;
                   font-weight:bold;display:inline-block;">Reset Password</a>

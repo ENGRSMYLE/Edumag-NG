@@ -23,6 +23,13 @@ class PasswordResetEmailTask:
     reset_link: str
 
 
+def _as_utc(value: datetime) -> datetime:
+    """Normalize timestamps without changing the instant they represent."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 async def _audit_for_memberships(
     db: AsyncSession, user_id, event_type: str, **event_data
 ) -> None:
@@ -86,7 +93,7 @@ async def request_password_reset(
         email_task = PasswordResetEmailTask(
             to_email=user.email,
             to_name=user.name,
-            reset_link=f"{settings.FRONTEND_URL}/reset-password?token={raw_token}",
+            reset_link=f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={raw_token}",
         )
 
     await db.commit()
@@ -102,7 +109,7 @@ async def reset_password(
         .where(PasswordResetToken.token_hash == hash_token(raw_token))
         .with_for_update()
     )).scalar_one_or_none()
-    if token is None or token.used_at is not None or token.expires_at.replace(tzinfo=timezone.utc) <= now:
+    if token is None or token.used_at is not None or _as_utc(token.expires_at) <= now:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired password reset token",

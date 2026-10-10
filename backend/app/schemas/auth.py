@@ -166,4 +166,8 @@ class ResetPasswordRequest(BaseModel):
             raise ValueError("Password must contain at least one uppercase letter")
         if not any(c.isdigit() for c in v):
             raise ValueError("Password must contain at least one number")
+        # bcrypt only considers the first 72 bytes. Reject longer values so a
+        # password cannot appear unique while authenticating as a truncation.
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password must not exceed 72 bytes")
         return v

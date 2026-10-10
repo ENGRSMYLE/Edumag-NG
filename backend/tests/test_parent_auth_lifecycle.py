@@ -221,6 +221,89 @@ async def test_password_reset_is_single_use_and_revokes_all_sessions(client, tes
 
 
 @pytest.mark.asyncio
+async def test_password_reset_http_flow_from_email_link_to_new_login(
+    client, test_engine, monkeypatch
+) -> None:
+    """Exercise the public endpoints and the link handed to the email sender."""
+    delivered: dict[str, str] = {}
+
+    async def capture_email(**kwargs) -> None:
+        delivered.update(kwargs)
+
+    monkeypatch.setattr("app.routers.auth.send_password_reset_email", capture_email)
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as db:
+        _, admin, _ = await _seed_school(db)
+        admin.email = "reset-flow@example.com"
+        await db.commit()
+        email = admin.email
+
+    requested = await client.post("/api/auth/forgot-password", json={"email": email})
+    assert requested.status_code == 200, requested.text
+    assert delivered["to_email"] == email
+    reset_token = parse_qs(urlparse(delivered["reset_link"]).query)["token"][0]
+
+    async with factory() as db:
+        stored = (await db.execute(select(PasswordResetToken))).scalar_one()
+        assert stored.token_hash == hash_token(reset_token)
+        assert reset_token not in stored.token_hash
+        assert stored.expires_at > datetime.now(timezone.utc)
+
+    too_long = await client.post(
+        "/api/auth/reset-password",
+        json={"token": reset_token, "new_password": f"Password1!{'x' * 72}"},
+    )
+    assert too_long.status_code == 422
+
+    reset = await client.post(
+        "/api/auth/reset-password",
+        json={"token": reset_token, "new_password": "ChangedPass1!"},
+    )
+    assert reset.status_code == 200, reset.text
+
+    replay = await client.post(
+        "/api/auth/reset-password",
+        json={"token": reset_token, "new_password": "AnotherPass1!"},
+    )
+    assert replay.status_code == 400
+
+    old_login = await client.post(
+        "/api/auth/login", json={"email": email, "password": "Password1!"}
+    )
+    new_login = await client.post(
+        "/api/auth/login", json={"email": email, "password": "ChangedPass1!"}
+    )
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200, new_login.text
+
+
+@pytest.mark.asyncio
+async def test_expired_password_reset_token_is_rejected(client, test_engine) -> None:
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as db:
+        _, admin, _ = await _seed_school(db)
+        task = await request_password_reset(
+            db, email=admin.email, requester_ip="127.0.0.21"
+        )
+        assert task is not None
+        reset_token = parse_qs(urlparse(task.reset_link).query)["token"][0]
+        stored = (await db.execute(select(PasswordResetToken))).scalar_one()
+        stored.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        await db.commit()
+
+    response = await client.post(
+        "/api/auth/reset-password",
+        json={"token": reset_token, "new_password": "ChangedPass1!"},
+    )
+    assert response.status_code == 400
+    assert "expired" in response.json()["detail"].lower()
+
+    async with factory() as db:
+        stored = (await db.execute(select(PasswordResetToken))).scalar_one()
+        assert stored.used_at is None
+
+
+@pytest.mark.asyncio
 async def test_disable_reactivate_parent_and_revoke_refresh(client, test_engine) -> None:
     factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as db:
